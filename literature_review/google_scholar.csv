@@ -1,0 +1,30 @@
+﻿Authors,Title,Publication,Volume,Number,Pages,Year,Publisher
+"Dai, Peng; Ma, Xiaoqin; Zhao, Yanyang; Gong, Yunzhan; ",Heterogeneous Graph Transformer with Multi-View Representation Learning for Flaky Test Detection,Computers,15,6,372,2026,MDPI
+"Pitstick, Kevin; Derr, Alex; Zhan, Lihan; Echeverría, Sebastián; ",Vessel: A Taxonomy of Reproducibility Issues for Container Images,2025 40th IEEE/ACM International Conference on Automated Software Engineering (ASE),,,3948-3952,2025,IEEE
+"Malka, Julien; Zacchiroli, Stefano; Zimmermann, Théo; ",Docker does not Guarantee Reproducibility,arXiv preprint arXiv:2601.12811,,,,2026,
+"Zhang, Chenhui; Wang, Haiyan; Zhu, Junyi; Gu, Zhaoquan; Wang, Le; ",Repairing Docker Smells with Large Language Models: An Empirical Study,Applied Sciences,16,13,6805,2026,MDPI
+"Xu, Jiwei; Wu, Yuewen; Lu, Zhigang; Wang, Tao; ",Dockerfile tf smell detection based on dynamic and static analysis methods,2019 ieee 43rd annual computer software and applications conference (compsac),1,,185-190,2019,IEEE
+"Jain, Vipin; Singh, Baldev; Khenwar, Medha; Sharma, Milind; ",Static vulnerability analysis of docker images,IOP Conference Series: Materials Science and Engineering,1131,1,012018,2021,IOP Publishing
+"SU, Hui; ZHANG, Jianhui; ZENG, Junjie; CHU, Xiaoxi; ",Static Detection Method for Dockerfile Temporary Files Based on Rule Validation,Computer Engineering,51,3,189-196,,Beijing Zhongke Journal Publising Co. Ltd.
+"Lu, Zhigang; Xu, Jiwei; Wu, Yuewen; Wang, Tao; Huang, Tao; ",An empirical case study on the temporary file smell in dockerfiles,IEEE Access,7,,63650-63659,2019,IEEE
+"Chen, Dongjin; Yang, Wenhua; Pan, Minxue; Zhou, Yu; ",Automating Dockerfile Refactoring to Multi-stage Builds,Proceedings of the ACM on Software Engineering,3,FSE,1560-1581,2026,"ACM New York, NY, USA"
+"Khadse, Mrinal Ashish; Dakhane, Dhananjay Manohar; ",Analysis of Docker Images on Static and Dynamic Vulnerability Scanning Tools,"2024 2nd International Conference on Signal Processing, Communication, Power and Embedded System (SCOPES)",,,1-6,2024,IEEE
+"Henkel, Jordan; Bird, Christian; Lahiri, Shuvendu K; Reps, Thomas; ",A dataset of dockerfiles,Proceedings of the 17th international conference on mining software repositories,,,528-532,2020,
+"Wu, Yiwen; Zhang, Yang; Wang, Tao; Wang, Huaimin; ",Characterizing the occurrence of dockerfile smells in open-source software: An empirical study,IEEE Access,8,,34127-34139,2020,IEEE
+"Henkel, Jordan; Silva, Denini; Teixeira, Leopoldo; d’Amorim, Marcelo; Reps, Thomas; ",Shipwright: A human-in-the-loop system for dockerfile repair,2021 IEEE/ACM 43rd International Conference on Software Engineering (ICSE),,,1148-1160,2021,IEEE
+"Wu, Yiwen; Zhang, Yang; Wang, Tao; Wang, Huaimin; ","Dockerfile changes in practice: A large-scale empirical study of 4,110 projects on github",2020 27th Asia-Pacific Software Engineering Conference (APSEC),,,247-256,2020,IEEE
+"Zhou, Yu; Zhan, Weilin; Li, Zi; Han, Tingting; Chen, Taolue; Gall, Harald; ",Drive: Dockerfile rule mining and violation detection,ACM Transactions on Software Engineering and Methodology,33,2,1-23,2023,"ACM New York, NY"
+"Ksontini, Emna; Mastouri, Meriem; Khalsi, Rania; Kessentini, Wael; ",Refactoring for dockerfile quality: A dive into developer practices and automation potential,2025 IEEE/ACM 22nd International Conference on Mining Software Repositories (MSR),,,788-800,2025,IEEE
+"Rosa, Giovanni; Zappone, Federico; Scalabrino, Simone; Oliveto, Rocco; ",Fixing Dockerfile smells: an empirical study,Empirical Software Engineering,29,5,108,2024,Springer
+"Patil, Sachet Rajat Kumar; John, Neil; Kunja, Poorvi Sameep; Dwivedi, Anushka; Suganthi, S; Honnnavali, Prasad B; ",Hardening Containers with Static and Dynamic Analysis,"Proceedings of the International Conference on Cybersecurity, Situational Awareness and Social Media: Cyber Science 2022; 20–21 June; Wales",,,207-227,2023,Springer
+"Kuppili, Rohit Venkata Satya; ",DockerGate: Automated Seccomp Policy Generation for Docker Images,2025 13th International Symposium on Digital Forensics and Security (ISDFS),,,1-6,2025,IEEE
+"Bui, Quang-Cuong; Laukötter, Malte; Scandariato, Riccardo; ",Dockercleaner: Automatic repair of security smells in dockerfiles,2023 IEEE International Conference on Software Maintenance and Evolution (ICSME),,,160-170,2023,IEEE
+"Ksontini, Emna; Ferreira, Thiago; Khalsi, Rania; Kessentini, Wael; ","Understanding Docker Refactorings: Expanded Taxonomy, Operational Trade-offs, and Role-Aware Recommendations",IEEE Transactions on Software Engineering,,,,2025,IEEE
+"Durieux, Thomas; ",Parfum: Detection and automatic repair of dockerfile smells,arXiv preprint arXiv:2302.01707,,,,2023,
+"Ksontini, Emna; Abid, Aycha; Khalsi, Rania; Kessentini, Marouane; ",Drminer: A tool for identifying and analyzing refactorings in dockerfile,Proceedings of the 21st international conference on mining software repositories,,,584-594,2024,
+"Ksontini, Emna; Kessentini, Marouane; Ferreira, Thiago do N; Hassan, Foyzul; ",Refactorings and technical debt in docker projects: An empirical study,2021 36th IEEE/ACM International Conference on Automated Software Engineering (ASE),,,781-791,2021,IEEE
+"Rosa, Giovanni; Scalabrino, Simone; Oliveto, Rocco; ",Assessing and improving the quality of docker artifacts,2022 IEEE International Conference on Software Maintenance and Evolution (ICSME),,,592-596,2022,IEEE
+"Wu, Yiwen; Zhang, Yang; Wang, Tao; Ding, Bo; Wang, Huaimin; ",DockerFill: Automatically Completing Dockerfile Code With Syntax-Aware Multi-Task Learning,IEEE Transactions on Software Engineering,52,1,137-154,2025,IEEE
+"Rosa, Giovanni; Scalabrino, Simone; Robles, Gregorio; Oliveto, Rocco; ",Not all dockerfile smells are the same: An empirical evaluation of hadolint writing practices by experts,Proceedings of the 21st International Conference on Mining Software Repositories,,,231-241,2024,
+"da Silva Matos, João Pereira; ",Improving the Developer Experience of Dockerfiles,,,,,2023,Universidade do Porto (Portugal)
+"ShabaniMirzaei, Taha; ",Dockerfile flakiness: characterization and repair,,,,,2024,University of British Columbia
