@@ -6,7 +6,7 @@ from pathlib import Path
 
 from flakiscan.cli import analyze
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 
 class TestEndToEnd(unittest.TestCase):

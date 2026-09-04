@@ -4,7 +4,7 @@ from pathlib import Path
 from flakiscan.detection import parfum_adapter
 from flakiscan.schema import Category
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 
 @unittest.skipUnless(parfum_adapter.is_available(), "node / @tdurieux/docker-parfum not installed")

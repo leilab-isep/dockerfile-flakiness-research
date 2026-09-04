@@ -4,7 +4,7 @@ from pathlib import Path
 
 from flakiscan.detection.dockerfile_parser import parse_dockerfile
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 
 class TestDockerfileParser(unittest.TestCase):

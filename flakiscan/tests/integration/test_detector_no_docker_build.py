@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from flakiscan.detection.detector import detect
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 _real_run = subprocess.run
 

@@ -208,18 +208,32 @@ already fixed are not detected a second time, and re-running never duplicates a
 
 ## Development
 
-Run the test suite with:
+```
+flakiscan/tests/
+├── fixtures/       # Sample Dockerfiles shared by unit and integration tests
+├── unit/           # Pure logic: no subprocess, network, or filesystem beyond temp files
+└── integration/    # Exercises real Hadolint/Docker Parfum subprocesses and the full pipeline
+```
+
+Run everything with:
 
 ```bash
 python3 -m unittest discover -s flakiscan/tests -p "test_*.py" -v
 ```
 
-No test framework beyond the standard library is required. Tests for the Hadolint and
-Docker Parfum adapters are skipped automatically if the corresponding tool is not
-installed; every other test runs unconditionally. Tests that exercise repair rules
-needing a network lookup pass in a fake `Resolvers` instance instead of the real one
-(see `refactoring/resolvers.py`), so the suite never depends on network access or the
-availability of any third-party service.
+Or run just one tier:
+
+```bash
+python3 -m unittest discover -s flakiscan/tests/unit -p "test_*.py"          # fast, no external tools needed
+python3 -m unittest discover -s flakiscan/tests/integration -p "test_*.py"   # needs hadolint and docker-parfum on PATH
+```
+
+No test framework beyond the standard library is required. Integration tests for the
+Hadolint and Docker Parfum adapters are skipped automatically if the corresponding tool
+is not installed; every unit test runs unconditionally. Unit tests that exercise repair
+rules needing a network lookup pass in a fake `Resolvers` instance instead of the real
+one (see `refactoring/resolvers.py`), so the unit tier never depends on network access
+or the availability of any third-party service.
 
 ## Troubleshooting
 

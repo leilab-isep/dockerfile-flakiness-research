@@ -4,7 +4,7 @@ from pathlib import Path
 from flakiscan.detection import hadolint_adapter
 from flakiscan.schema import Category
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 
 @unittest.skipUnless(hadolint_adapter.is_available(), "hadolint binary not installed")

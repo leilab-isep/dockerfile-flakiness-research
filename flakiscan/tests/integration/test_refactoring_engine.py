@@ -11,7 +11,7 @@ from unittest.mock import patch
 from flakiscan.refactoring.engine import repair_dockerfile
 from flakiscan.refactoring.resolvers import Resolvers
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 FAKE_RESOLVERS = Resolvers(
     pypi_latest_version=lambda pkg: "2.32.3",
