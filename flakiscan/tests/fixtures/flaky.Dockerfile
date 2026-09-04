@@ -1,4 +1,3 @@
-# flakiscan-ignore: DL3007
 FROM ubuntu:latest
 
 ARG BUILD_ENV
