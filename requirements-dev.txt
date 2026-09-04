@@ -1,0 +1,5 @@
+# Tooling used by CI and local development. Not required to run flakiscan itself.
+ruff~=0.16
+black~=26.0
+coverage~=7.6
+build~=1.2

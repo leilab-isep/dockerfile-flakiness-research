@@ -2,3 +2,11 @@
 /sample_demo/
 /corpus/
 .idea
+__pycache__/
+*.pyc
+/dist/
+/build/
+*.egg-info/
+.coverage
+htmlcov/
+.DS_Store

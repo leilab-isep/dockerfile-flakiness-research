@@ -27,9 +27,23 @@ class Instruction:
 _INSTRUCTION_RE = re.compile(r"^([A-Za-z]+)(?:\s+(.*))?$", re.DOTALL)
 
 VALID_INSTRUCTIONS = {
-    "FROM", "RUN", "CMD", "LABEL", "EXPOSE", "ENV",
-    "ADD", "COPY", "ENTRYPOINT", "VOLUME", "USER",
-    "WORKDIR", "ARG", "ONBUILD", "STOPSIGNAL", "HEALTHCHECK", "SHELL",
+    "FROM",
+    "RUN",
+    "CMD",
+    "LABEL",
+    "EXPOSE",
+    "ENV",
+    "ADD",
+    "COPY",
+    "ENTRYPOINT",
+    "VOLUME",
+    "USER",
+    "WORKDIR",
+    "ARG",
+    "ONBUILD",
+    "STOPSIGNAL",
+    "HEALTHCHECK",
+    "SHELL",
 }
 
 

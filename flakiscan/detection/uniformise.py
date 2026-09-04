@@ -37,13 +37,15 @@ def uniformise(
                 continue
             seen.add(key)
 
-            findings.append(Finding(
-                rule_id=raw["rule_id"],
-                tool_source=tool_source,
-                category=raw["category"],
-                line_number=raw["line_number"],
-                message=raw["message"],
-                flakiness_relevant=raw["flakiness_relevant"],
-            ))
+            findings.append(
+                Finding(
+                    rule_id=raw["rule_id"],
+                    tool_source=tool_source,
+                    category=raw["category"],
+                    line_number=raw["line_number"],
+                    message=raw["message"],
+                    flakiness_relevant=raw["flakiness_relevant"],
+                )
+            )
 
     return findings

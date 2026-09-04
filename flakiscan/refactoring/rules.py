@@ -47,7 +47,7 @@ def _split_commands(text: str) -> list[str]:
     match = _LEADING_INSTRUCTION_RE.match(text)
     if not match:
         return _SEGMENT_SPLIT_RE.split(text)
-    return [match.group(0)] + _SEGMENT_SPLIT_RE.split(text[match.end():])
+    return [match.group(0)] + _SEGMENT_SPLIT_RE.split(text[match.end() :])
 
 
 def _no_fix(text: str) -> SubRepairResult:
@@ -72,7 +72,7 @@ def _split_image_ref(image_ref: str) -> tuple[str, str]:
     colon = image_ref.find(":", last_slash + 1)
     if colon == -1:
         return image_ref, "latest"
-    return image_ref[:colon], image_ref[colon + 1:]
+    return image_ref[:colon], image_ref[colon + 1 :]
 
 
 def _docker_hub_repository(name: str) -> str | None:
@@ -157,7 +157,7 @@ def repair_restructure_curl_pipe_shell(text: str, rule_ids: set[str], resolvers:
     replacement = f"{download_cmd} && sha256sum {dest} && {shell} {dest}"
 
     return SubRepairResult(
-        text=text[:match.start()] + replacement + text[match.end():],
+        text=text[: match.start()] + replacement + text[match.end() :],
         handled_rule_ids=set(rule_ids),
         rationale=[
             f"Restructured the piped-to-shell download into download-then-execute; "
@@ -236,6 +236,7 @@ def repair_add_no_cache_flag(text: str, rule_ids: set[str], resolvers: Resolvers
 # Require -y / non-interactive flag
 # ---------------------------------------------------------------------------
 
+
 def repair_require_yes_flag(text: str, rule_ids: set[str], resolvers: Resolvers) -> SubRepairResult:
     handled: set[str] = set()
     rationale: list[str] = []
@@ -251,11 +252,7 @@ def repair_require_yes_flag(text: str, rule_ids: set[str], resolvers: Resolvers)
             handled.add("aptGetInstallUseY")
             rationale.append("Added -y to apt-get install so the build cannot hang on an interactive prompt.")
 
-    if (
-        "yumInstallForceYes" in rule_ids
-        and _YUM_INSTALL_ANCHOR.search(text)
-        and not re.search(r"yum\s+install\b[^&;]*(-y\b|--assumeyes\b)", text)
-    ):
+    if "yumInstallForceYes" in rule_ids and _YUM_INSTALL_ANCHOR.search(text) and not re.search(r"yum\s+install\b[^&;]*(-y\b|--assumeyes\b)", text):
         updated = _insert_after(text, _YUM_INSTALL_ANCHOR, "-y")
         if updated:
             text = updated
@@ -268,6 +265,7 @@ def repair_require_yes_flag(text: str, rule_ids: set[str], resolvers: Resolvers)
 # ---------------------------------------------------------------------------
 # Fuse a missing apt-get update into the install
 # ---------------------------------------------------------------------------
+
 
 def repair_fuse_apt_update(text: str, rule_ids: set[str], resolvers: Resolvers) -> SubRepairResult:
     if "aptGetUpdatePrecedesInstall" not in rule_ids:
@@ -292,6 +290,7 @@ def repair_fuse_apt_update(text: str, rule_ids: set[str], resolvers: Resolvers) 
 # ---------------------------------------------------------------------------
 # Merge duplicate install commands -- always deferred
 # ---------------------------------------------------------------------------
+
 
 def repair_merge_duplicate_installs(text: str, rule_ids: set[str], resolvers: Resolvers) -> SubRepairResult:
     # Safely merging install commands means removing or rewriting a *different*
@@ -325,11 +324,7 @@ def repair_add_cache_cleanup(text: str, rule_ids: set[str], resolvers: Resolvers
             handled.add("npmCacheCleanUseForce")
             rationale.append("Added --force to npm cache clean, which npm otherwise ignores.")
 
-    if (
-        "npmCacheCleanAfterInstall" in rule_ids
-        and re.search(r"npm\s+install\b", text)
-        and not _NPM_CACHE_CLEAN_RE.search(text)
-    ):
+    if "npmCacheCleanAfterInstall" in rule_ids and re.search(r"npm\s+install\b", text) and not _NPM_CACHE_CLEAN_RE.search(text):
         text = f"{text.rstrip()} && npm cache clean --force"
         handled.add("npmCacheCleanAfterInstall")
         rationale.append("Appended npm cache clean after install to avoid caching packages in the image layer.")
@@ -345,6 +340,7 @@ def repair_add_cache_cleanup(text: str, rule_ids: set[str], resolvers: Resolvers
 # ---------------------------------------------------------------------------
 # Harden curl/wget flags and URLs
 # ---------------------------------------------------------------------------
+
 
 def repair_harden_curl_wget(text: str, rule_ids: set[str], resolvers: Resolvers) -> SubRepairResult:
     """Add missing -f/-L flags to curl and upgrade http:// to https:// for curl/wget.
@@ -415,7 +411,7 @@ def repair_fix_checksum_signature(text: str, rule_ids: set[str], resolvers: Reso
 
     if "gpgVerifyAscRmAsc" in rule_ids:
         match = _GPG_VERIFY_ASC_RE.search(text)
-        if match and "rm" not in text[match.end():]:
+        if match and "rm" not in text[match.end() :]:
             sig_file = match.group(1)
             text = f"{text.rstrip()} && rm -f {sig_file}"
             handled.add("gpgVerifyAscRmAsc")
@@ -427,6 +423,7 @@ def repair_fix_checksum_signature(text: str, rule_ids: set[str], resolvers: Reso
 # ---------------------------------------------------------------------------
 # ARG with no default -- no automated fix
 # ---------------------------------------------------------------------------
+
 
 def repair_arg_no_default(text: str, rule_ids: set[str], resolvers: Resolvers) -> SubRepairResult:
     # The build's behavior depends on an externally supplied --build-arg value that
@@ -523,16 +520,14 @@ _NPM_INSTALL_ANCHOR = re.compile(r"npm\s+install\b")
 _GEM_INSTALL_ANCHOR = re.compile(r"gem\s+install\b")
 
 
-def _pin_single_package(
-    text: str, anchor: re.Pattern[str], separator_fmt: str, resolve: Callable[[str], str | None]
-) -> tuple[str, str, str] | None:
+def _pin_single_package(text: str, anchor: re.Pattern[str], separator_fmt: str, resolve: Callable[[str], str | None]) -> tuple[str, str, str] | None:
     """Find exactly one unversioned package after `anchor` in `text`, resolve its
     current version, and rewrite it in place. Returns (new_text, package, version), or
     None if there isn't exactly one resolvable bare package name to pin."""
     match = anchor.search(text)
     if not match:
         return None
-    tail = text[match.end():]
+    tail = text[match.end() :]
     tokens = [t for t in tail.split() if not t.startswith("-")]
     packages = _unversioned_packages(tokens)
     if len(packages) != 1:
@@ -545,7 +540,7 @@ def _pin_single_package(
 
     pinned = separator_fmt.format(name=package, version=version)
     new_tail = tail.replace(package, pinned, 1)
-    return text[:match.end()] + new_tail, package, version
+    return text[: match.end()] + new_tail, package, version
 
 
 def repair_pin_package_version(text: str, rule_ids: set[str], resolvers: Resolvers) -> SubRepairResult:
@@ -590,6 +585,7 @@ def repair_pin_package_version(text: str, rule_ids: set[str], resolvers: Resolve
 # Add a checksum after a file download
 # ---------------------------------------------------------------------------
 
+
 def repair_add_download_checksum(text: str, rule_ids: set[str], resolvers: Resolvers) -> SubRepairResult:
     if "download_no_checksum" not in rule_ids:
         return _no_fix(text)
@@ -617,10 +613,7 @@ def repair_add_download_checksum(text: str, rule_ids: set[str], resolvers: Resol
         # (echo ... | sha256sum -c) so this fix does not itself introduce a new shell
         # pipe that would need its own pipefail handling.
         checksum_file = f"{dest}.sha256"
-        segments[i] = (
-            f"{segment.rstrip()} && echo '{checksum}  {dest}' > {checksum_file} "
-            f"&& sha256sum -c {checksum_file}"
-        )
+        segments[i] = f"{segment.rstrip()} && echo '{checksum}  {dest}' > {checksum_file} " f"&& sha256sum -c {checksum_file}"
         return SubRepairResult(
             text="".join(segments),
             handled_rule_ids={"download_no_checksum"},
@@ -639,16 +632,35 @@ SUB_REPAIRS: list[tuple[frozenset[str], RepairFunc]] = [
     (frozenset({"DL4006", "missing_pipefail"}), repair_add_pipefail),
     (frozenset({"curl_pipe_shell"}), repair_restructure_curl_pipe_shell),
     (frozenset({"DL3009", "aptGetInstallThenRemoveAptLists"}), repair_apt_get_cleanup),
-    (frozenset({"DL3019", "apkAddUseNoCache", "aptGetInstallUseNoRec", "DL3042", "pipUseNoCacheDir"}), repair_add_no_cache_flag),
+    (
+        frozenset({"DL3019", "apkAddUseNoCache", "aptGetInstallUseNoRec", "DL3042", "pipUseNoCacheDir"}),
+        repair_add_no_cache_flag,
+    ),
     (frozenset({"aptGetInstallUseY", "yumInstallForceYes"}), repair_require_yes_flag),
     (frozenset({"aptGetUpdatePrecedesInstall"}), repair_fuse_apt_update),
     (frozenset({"ruleMoreThanOneInstall"}), repair_merge_duplicate_installs),
-    (frozenset({"yumInstallRmVarCacheYum", "npmCacheCleanAfterInstall", "npmCacheCleanUseForce", "yarnCacheCleanAfterInstall"}), repair_add_cache_cleanup),
-    (frozenset({"curlUseFlagF", "curlUseFlagL", "curlUseHttpsUrl", "wgetUseHttpsUrl"}), repair_harden_curl_wget),
+    (
+        frozenset(
+            {
+                "yumInstallRmVarCacheYum",
+                "npmCacheCleanAfterInstall",
+                "npmCacheCleanUseForce",
+                "yarnCacheCleanAfterInstall",
+            }
+        ),
+        repair_add_cache_cleanup,
+    ),
+    (
+        frozenset({"curlUseFlagF", "curlUseFlagL", "curlUseHttpsUrl", "wgetUseHttpsUrl"}),
+        repair_harden_curl_wget,
+    ),
     (frozenset({"sha256sumEchoOneSpaces", "gpgVerifyAscRmAsc"}), repair_fix_checksum_signature),
     (frozenset({"arg_no_default"}), repair_arg_no_default),
     (frozenset({"git_clone_no_pin"}), repair_pin_git_clone),
     (frozenset({"add_remote_url", "DL3020"}), repair_replace_add),
-    (frozenset({"DL3008", "DL3013", "DL3016", "DL3018", "DL3028", "DL3033", "DL3037", "DL3041"}), repair_pin_package_version),
+    (
+        frozenset({"DL3008", "DL3013", "DL3016", "DL3018", "DL3028", "DL3033", "DL3037", "DL3041"}),
+        repair_pin_package_version,
+    ),
     (frozenset({"download_no_checksum"}), repair_add_download_checksum),
 ]

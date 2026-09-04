@@ -1,7 +1,6 @@
 """Resolver unit tests. All network access is mocked -- these must never depend on
 having a working internet connection."""
 
-import io
 import json
 import unittest
 import urllib.error
@@ -84,6 +83,7 @@ class TestDockerHubDigest(unittest.TestCase):
 class TestFetchSha256(unittest.TestCase):
     def test_returns_hex_digest_of_content(self):
         import hashlib
+
         content = b"hello world"
         expected = hashlib.sha256(content).hexdigest()
 

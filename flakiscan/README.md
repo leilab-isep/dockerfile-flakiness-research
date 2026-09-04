@@ -235,6 +235,39 @@ rules needing a network lookup pass in a fake `Resolvers` instance instead of th
 one (see `refactoring/resolvers.py`), so the unit tier never depends on network access
 or the availability of any third-party service.
 
+### Linting, formatting, and coverage
+
+Install the pinned tool versions with `pip install -r requirements-dev.txt` (repository
+root), then:
+
+```bash
+ruff check flakiscan                 # lint
+black --check --diff flakiscan       # formatting (drop --check --diff to auto-format)
+coverage run --source=flakiscan --omit="flakiscan/tests/*" \
+    -m unittest discover -s flakiscan/tests/unit -p "test_*.py"
+coverage report -m --fail-under=80   # fails if total coverage drops below 80%
+```
+
+The unit tier alone reaches roughly 95% coverage, since every external boundary
+(subprocess calls to Hadolint/Docker Parfum, network lookups in `refactoring/resolvers.py`)
+is exercised through a mock rather than skipped.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request, as four independent
+jobs:
+
+- **lint** -- `ruff check` and `black --check` against `flakiscan/`.
+- **build** -- builds an installable wheel (`python -m build`), then installs it into a
+  clean virtual environment and runs the `flakiscan` console script against a sample
+  Dockerfile, catching packaging mistakes (like a runtime file missing from the wheel)
+  that unit tests alone would not.
+- **test** -- runs the unit test tier under `coverage` and fails the job if total
+  coverage drops below 80%.
+- **integration** -- installs Hadolint and Docker Parfum on the runner (a pinned
+  Hadolint release binary, `@tdurieux/docker-parfum` via npm) and runs
+  `flakiscan/tests/integration/` against the real tools.
+
 ## Troubleshooting
 
 - **`HadolintUnavailableError` / `ParfumUnavailableError`**: the corresponding tool is

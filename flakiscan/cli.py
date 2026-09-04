@@ -66,17 +66,31 @@ def _print_human(report: dict) -> None:
 def _print_repair_summary(report) -> None:
     for action in report.actions:
         if action.applied_rule_ids:
-            print(f"  L{action.line_number} ({action.instruction}): fixed {', '.join(action.applied_rule_ids)}", file=sys.stderr)
+            print(
+                f"  L{action.line_number} ({action.instruction}): fixed {', '.join(action.applied_rule_ids)}",
+                file=sys.stderr,
+            )
         if action.fallback_rule_ids:
-            print(f"  L{action.line_number} ({action.instruction}): left as TODO: {', '.join(action.fallback_rule_ids)}", file=sys.stderr)
+            print(
+                f"  L{action.line_number} ({action.instruction}): left as TODO: {', '.join(action.fallback_rule_ids)}",
+                file=sys.stderr,
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Analyze a Dockerfile for build-flakiness risks.")
     parser.add_argument("dockerfile", help="Path to the Dockerfile to analyze.")
     parser.add_argument("--json", action="store_true", help="Print the raw JSON report instead of the human-readable summary.")
-    parser.add_argument("--repair", action="store_true", help="Attempt to automatically fix findings and print the patched Dockerfile.")
-    parser.add_argument("--in-place", action="store_true", help="With --repair, overwrite the input file instead of printing to stdout.")
+    parser.add_argument(
+        "--repair",
+        action="store_true",
+        help="Attempt to automatically fix findings and print the patched Dockerfile.",
+    )
+    parser.add_argument(
+        "--in-place",
+        action="store_true",
+        help="With --repair, overwrite the input file instead of printing to stdout.",
+    )
     args = parser.parse_args(argv)
 
     if args.repair:
