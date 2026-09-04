@@ -105,9 +105,7 @@ def docker_hub_digest(repository: str, tag: str) -> str | None:
     for an official image or "someuser/someapp" for a user image. Only Docker Hub is
     supported; other registries have no standard anonymous-pull token endpoint.
     """
-    token_data = _get_json(
-        f"{_DOCKER_HUB_AUTH_URL}?service=registry.docker.io&scope=repository:{repository}:pull"
-    )
+    token_data = _get_json(f"{_DOCKER_HUB_AUTH_URL}?service=registry.docker.io&scope=repository:{repository}:pull")
     if not isinstance(token_data, dict) or not token_data.get("token"):
         return None
 

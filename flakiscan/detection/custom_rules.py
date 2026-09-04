@@ -16,9 +16,7 @@ from flakiscan.schema import Category
 _CHECKSUM_TOOLS = re.compile(r"\b(sha256sum|sha1sum|md5sum|gpg\s+--verify)\b")
 # curl/wget must be the command immediately feeding the pipe, not merely present
 # somewhere earlier in the RUN (e.g. as an apt-get package name).
-_CURL_OR_WGET_PIPE_TO_SHELL = re.compile(
-    r"\b(curl|wget)\b[^|&;]*\|\s*(sudo\s+)?(bash|sh|zsh|ash)\b"
-)
+_CURL_OR_WGET_PIPE_TO_SHELL = re.compile(r"\b(curl|wget)\b[^|&;]*\|\s*(sudo\s+)?(bash|sh|zsh|ash)\b")
 _SINGLE_PIPE = re.compile(r"(?<!\|)\|(?!\|)")
 _GIT_CLONE = re.compile(r"\bgit\s+clone\b")
 _GIT_CHECKOUT = re.compile(r"\bgit\s+checkout\b")
@@ -59,19 +57,23 @@ def rule_implicit_and_explicit_latest(instructions: list[Instruction]) -> list[d
         # image[:tag] -- a ':' after the last '/' separates the tag from the name.
         name_part = image_ref.rsplit("/", 1)[-1]
         if ":" not in name_part:
-            findings.append({
-                "rule_id": "implicit_latest",
-                "line_number": inst.line_number,
-                "message": f"FROM '{image_ref}' has no tag and defaults to :latest.",
-                "category": Category.BASE_IMAGE,
-            })
+            findings.append(
+                {
+                    "rule_id": "implicit_latest",
+                    "line_number": inst.line_number,
+                    "message": f"FROM '{image_ref}' has no tag and defaults to :latest.",
+                    "category": Category.BASE_IMAGE,
+                }
+            )
         elif name_part.rsplit(":", 1)[-1] == "latest":
-            findings.append({
-                "rule_id": "explicit_latest",
-                "line_number": inst.line_number,
-                "message": f"FROM '{image_ref}' explicitly pins the mutable :latest tag.",
-                "category": Category.BASE_IMAGE,
-            })
+            findings.append(
+                {
+                    "rule_id": "explicit_latest",
+                    "line_number": inst.line_number,
+                    "message": f"FROM '{image_ref}' explicitly pins the mutable :latest tag.",
+                    "category": Category.BASE_IMAGE,
+                }
+            )
 
     return findings
 
@@ -83,12 +85,14 @@ def rule_curl_pipe_shell(instructions: list[Instruction]) -> list[dict]:
         if inst.instruction != "RUN":
             continue
         if _CURL_OR_WGET_PIPE_TO_SHELL.search(inst.args):
-            findings.append({
-                "rule_id": "curl_pipe_shell",
-                "line_number": inst.line_number,
-                "message": "Remote script piped directly into a shell interpreter.",
-                "category": Category.NETWORK,
-            })
+            findings.append(
+                {
+                    "rule_id": "curl_pipe_shell",
+                    "line_number": inst.line_number,
+                    "message": "Remote script piped directly into a shell interpreter.",
+                    "category": Category.NETWORK,
+                }
+            )
     return findings
 
 
@@ -100,12 +104,14 @@ def rule_add_remote_url(instructions: list[Instruction]) -> list[dict]:
             continue
         first_token = inst.args.split()[0] if inst.args.split() else ""
         if first_token.lower().startswith(("http://", "https://")):
-            findings.append({
-                "rule_id": "add_remote_url",
-                "line_number": inst.line_number,
-                "message": f"ADD fetches a remote URL ({first_token}); the resource may change or disappear.",
-                "category": Category.NETWORK,
-            })
+            findings.append(
+                {
+                    "rule_id": "add_remote_url",
+                    "line_number": inst.line_number,
+                    "message": f"ADD fetches a remote URL ({first_token}); the resource may change or disappear.",
+                    "category": Category.NETWORK,
+                }
+            )
     return findings
 
 
@@ -118,12 +124,14 @@ def rule_git_clone_no_pin(instructions: list[Instruction]) -> list[dict]:
         if inst.instruction != "RUN":
             continue
         if _GIT_CLONE.search(inst.args) and not _GIT_CHECKOUT.search(inst.args):
-            findings.append({
-                "rule_id": "git_clone_no_pin",
-                "line_number": inst.line_number,
-                "message": "git clone is not followed by a git checkout to a pinned ref; build depends on the current HEAD.",
-                "category": Category.NETWORK,
-            })
+            findings.append(
+                {
+                    "rule_id": "git_clone_no_pin",
+                    "line_number": inst.line_number,
+                    "message": "git clone is not followed by a git checkout to a pinned ref; build depends on the current HEAD.",
+                    "category": Category.NETWORK,
+                }
+            )
     return findings
 
 
@@ -135,12 +143,14 @@ def rule_arg_no_default(instructions: list[Instruction]) -> list[dict]:
         if inst.instruction != "ARG":
             continue
         if "=" not in inst.args:
-            findings.append({
-                "rule_id": "arg_no_default",
-                "line_number": inst.line_number,
-                "message": f"ARG '{inst.args}' has no default value; build is not reproducible without --build-arg.",
-                "category": Category.ENVIRONMENT,
-            })
+            findings.append(
+                {
+                    "rule_id": "arg_no_default",
+                    "line_number": inst.line_number,
+                    "message": f"ARG '{inst.args}' has no default value; build is not reproducible without --build-arg.",
+                    "category": Category.ENVIRONMENT,
+                }
+            )
     return findings
 
 
@@ -168,12 +178,14 @@ def rule_missing_pipefail(instructions: list[Instruction]) -> list[dict]:
         if pipefail_shell_active or "set -o pipefail" in inst.args:
             continue
 
-        findings.append({
-            "rule_id": "missing_pipefail",
-            "line_number": inst.line_number,
-            "message": "RUN contains a shell pipe without 'set -o pipefail'; a failure in an earlier stage of the pipe is silently ignored.",
-            "category": Category.REPRODUCIBILITY,
-        })
+        findings.append(
+            {
+                "rule_id": "missing_pipefail",
+                "line_number": inst.line_number,
+                "message": "RUN contains a shell pipe without 'set -o pipefail'; a failure in an earlier stage of the pipe is silently ignored.",
+                "category": Category.REPRODUCIBILITY,
+            }
+        )
 
     return findings
 
@@ -205,12 +217,14 @@ def rule_download_no_checksum(instructions: list[Instruction]) -> list[dict]:
         if _CHECKSUM_TOOLS.search(inst.args):
             continue
 
-        findings.append({
-            "rule_id": "download_no_checksum",
-            "line_number": inst.line_number,
-            "message": "File download is not followed by a checksum verification step.",
-            "category": Category.NETWORK,
-        })
+        findings.append(
+            {
+                "rule_id": "download_no_checksum",
+                "line_number": inst.line_number,
+                "message": "File download is not followed by a checksum verification step.",
+                "category": Category.NETWORK,
+            }
+        )
     return findings
 
 

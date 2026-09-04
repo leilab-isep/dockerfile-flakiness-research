@@ -83,10 +83,7 @@ def run(dockerfile_path: str, ignore_map: IgnoreMap | None = None) -> list[dict]
     """
     node_path = _resolve_module_path()
     if shutil.which("node") is None or node_path is None:
-        raise ParfumUnavailableError(
-            "node or @tdurieux/docker-parfum not found; "
-            "install with `npm install -g @tdurieux/docker-parfum`"
-        )
+        raise ParfumUnavailableError("node or @tdurieux/docker-parfum not found; " "install with `npm install -g @tdurieux/docker-parfum`")
 
     env = os.environ.copy()
     env["NODE_PATH"] = node_path
@@ -111,12 +108,14 @@ def run(dockerfile_path: str, ignore_map: IgnoreMap | None = None) -> list[dict]
         if category is None:
             continue  # Not one of the rules this project tracks.
 
-        findings.append({
-            "rule_id": rule_id,
-            "line_number": item.get("line_number"),
-            "message": item.get("message", ""),
-            "category": category,
-            "flakiness_relevant": True,
-        })
+        findings.append(
+            {
+                "rule_id": rule_id,
+                "line_number": item.get("line_number"),
+                "message": item.get("message", ""),
+                "category": category,
+                "flakiness_relevant": True,
+            }
+        )
 
     return filter_ignored(findings, ignore_map or {})

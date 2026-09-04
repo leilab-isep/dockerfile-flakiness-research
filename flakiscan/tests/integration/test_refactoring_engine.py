@@ -39,9 +39,7 @@ class TestMinimalPatch(unittest.TestCase):
         # Every line untouched by a repair must appear, unmodified, somewhere in the
         # patched output, in original order -- this is a coarse but effective check
         # that unrelated content (COPY, WORKDIR, CMD, blank lines) survives untouched.
-        untouched_original = [
-            line for i, line in enumerate(original_lines, start=1) if i not in touched_line_numbers and line.strip()
-        ]
+        untouched_original = [line for i, line in enumerate(original_lines, start=1) if i not in touched_line_numbers and line.strip()]
         for line in untouched_original:
             self.assertIn(line, patched_lines)
 
@@ -104,9 +102,7 @@ class TestTodoFallback(unittest.TestCase):
         self.assertIn("# TODO(flakiscan): could not automatically fix: arg_no_default", report.patched_text)
 
     def test_todo_comment_lists_all_unhandled_rules_for_the_line(self):
-        action = repair_dockerfile(
-            str(FIXTURES / "flaky.Dockerfile"), resolvers=Resolvers(pypi_latest_version=lambda pkg: None)
-        )
+        action = repair_dockerfile(str(FIXTURES / "flaky.Dockerfile"), resolvers=Resolvers(pypi_latest_version=lambda pkg: None))
         pip_action = next(a for a in action.actions if a.instruction == "RUN" and "DL3013" in a.triggered_rule_ids)
         self.assertIn("DL3013", pip_action.fallback_rule_ids)
         self.assertNotIn("DL3013", pip_action.applied_rule_ids)

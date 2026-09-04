@@ -21,9 +21,7 @@ def _owning_instruction(instructions: list[Instruction], line_number: int) -> In
     return None
 
 
-def _group_findings_by_instruction(
-    findings: list[Finding], instructions: list[Instruction]
-) -> dict[int, tuple[Instruction, list[Finding]]]:
+def _group_findings_by_instruction(findings: list[Finding], instructions: list[Instruction]) -> dict[int, tuple[Instruction, list[Finding]]]:
     groups: dict[int, tuple[Instruction, list[Finding]]] = {}
     for finding in findings:
         inst = _owning_instruction(instructions, finding.line_number)
@@ -110,23 +108,25 @@ def repair_dockerfile(dockerfile_path: str, resolvers: Resolvers = DEFAULT_RESOL
         end_line = inst.end_line_number if inst.end_line_number is not None else inst.line_number
         triggered_rule_ids = sorted({f.rule_id for f in findings})
 
-        original_block = original_lines[start_line - 1: end_line]
+        original_block = original_lines[start_line - 1 : end_line]
         original_text = "".join(original_block).rstrip("\n")
 
         new_text, handled, rationale = _apply_sub_repairs(original_text, set(triggered_rule_ids), resolvers)
         unhandled = set(triggered_rule_ids) - handled
 
-        actions.append(RepairAction(
-            line_number=start_line,
-            end_line_number=end_line,
-            instruction=inst.instruction,
-            triggered_rule_ids=triggered_rule_ids,
-            applied_rule_ids=sorted(handled),
-            fallback_rule_ids=sorted(unhandled),
-            rationale=rationale,
-            original_text=original_text,
-            new_text=_fallback_comment(unhandled) + "\n" + new_text if unhandled else new_text,
-        ))
+        actions.append(
+            RepairAction(
+                line_number=start_line,
+                end_line_number=end_line,
+                instruction=inst.instruction,
+                triggered_rule_ids=triggered_rule_ids,
+                applied_rule_ids=sorted(handled),
+                fallback_rule_ids=sorted(unhandled),
+                rationale=rationale,
+                original_text=original_text,
+                new_text=_fallback_comment(unhandled) + "\n" + new_text if unhandled else new_text,
+            )
+        )
 
         patch_start_line, ignore_comment = _find_prefix(original_lines, start_line)
         output_lines = []

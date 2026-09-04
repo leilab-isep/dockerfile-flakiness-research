@@ -28,9 +28,7 @@ class TestImplicitAndExplicitLatest(unittest.TestCase):
         self.assertEqual(findings, [])
 
     def test_digest_pinned_is_clean(self):
-        findings = custom_rules.rule_implicit_and_explicit_latest(
-            [inst("FROM", "ubuntu@sha256:" + "a" * 64)]
-        )
+        findings = custom_rules.rule_implicit_and_explicit_latest([inst("FROM", "ubuntu@sha256:" + "a" * 64)])
         self.assertEqual(findings, [])
 
     def test_multi_stage_alias_reference_is_clean(self):
@@ -52,9 +50,7 @@ class TestCurlPipeShell(unittest.TestCase):
         self.assertEqual(findings, [])
 
     def test_curl_as_apt_package_with_unrelated_pipe_not_flagged(self):
-        findings = custom_rules.rule_curl_pipe_shell(
-            [inst("RUN", "apt-get install -y curl && echo hi | bash")]
-        )
+        findings = custom_rules.rule_curl_pipe_shell([inst("RUN", "apt-get install -y curl && echo hi | bash")])
         self.assertEqual(findings, [])
 
 
@@ -74,9 +70,7 @@ class TestGitCloneNoPin(unittest.TestCase):
         self.assertEqual(rule_ids(findings), {"git_clone_no_pin"})
 
     def test_clone_with_checkout_not_flagged(self):
-        findings = custom_rules.rule_git_clone_no_pin(
-            [inst("RUN", "git clone https://x.io/repo.git && cd repo && git checkout abc123")]
-        )
+        findings = custom_rules.rule_git_clone_no_pin([inst("RUN", "git clone https://x.io/repo.git && cd repo && git checkout abc123")])
         self.assertEqual(findings, [])
 
 
@@ -104,9 +98,7 @@ class TestMissingPipefail(unittest.TestCase):
         self.assertEqual(findings, [])
 
     def test_pipe_with_inline_set_pipefail_not_flagged(self):
-        findings = custom_rules.rule_missing_pipefail(
-            [inst("RUN", "set -o pipefail && cat file | grep foo")]
-        )
+        findings = custom_rules.rule_missing_pipefail([inst("RUN", "set -o pipefail && cat file | grep foo")])
         self.assertEqual(findings, [])
 
     def test_no_pipe_not_flagged(self):
@@ -120,9 +112,7 @@ class TestDownloadNoChecksum(unittest.TestCase):
         self.assertEqual(rule_ids(findings), {"download_no_checksum"})
 
     def test_wget_with_checksum_not_flagged(self):
-        findings = custom_rules.rule_download_no_checksum(
-            [inst("RUN", "wget https://x.io/file.tar.gz && sha256sum -c file.tar.gz.sha256")]
-        )
+        findings = custom_rules.rule_download_no_checksum([inst("RUN", "wget https://x.io/file.tar.gz && sha256sum -c file.tar.gz.sha256")])
         self.assertEqual(findings, [])
 
     def test_curl_pipe_shell_not_double_counted(self):
@@ -130,9 +120,7 @@ class TestDownloadNoChecksum(unittest.TestCase):
         self.assertEqual(findings, [])
 
     def test_curl_as_apt_package_name_not_flagged(self):
-        findings = custom_rules.rule_download_no_checksum(
-            [inst("RUN", "apt-get update && apt-get install -y curl")]
-        )
+        findings = custom_rules.rule_download_no_checksum([inst("RUN", "apt-get update && apt-get install -y curl")])
         self.assertEqual(findings, [])
 
 

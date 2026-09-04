@@ -56,9 +56,7 @@ def run(dockerfile_path: str, ignore_map: IgnoreMap | None = None) -> list[dict]
     builds or runs the analyzed image -- it only reads the Dockerfile source.
     """
     if not is_available():
-        raise HadolintUnavailableError(
-            "hadolint binary not found on PATH; install it (e.g. `brew install hadolint`)"
-        )
+        raise HadolintUnavailableError("hadolint binary not found on PATH; install it (e.g. `brew install hadolint`)")
 
     proc = subprocess.run(
         ["hadolint", "--format", "json", dockerfile_path],
@@ -82,12 +80,14 @@ def run(dockerfile_path: str, ignore_map: IgnoreMap | None = None) -> list[dict]
         if category is None:
             continue  # Not one of the rules this project tracks.
 
-        findings.append({
-            "rule_id": code,
-            "line_number": item.get("line"),
-            "message": item.get("message", ""),
-            "category": category,
-            "flakiness_relevant": category != Category.BEST_PRACTICE,
-        })
+        findings.append(
+            {
+                "rule_id": code,
+                "line_number": item.get("line"),
+                "message": item.get("message", ""),
+                "category": category,
+                "flakiness_relevant": category != Category.BEST_PRACTICE,
+            }
+        )
 
     return filter_ignored(findings, ignore_map or {})

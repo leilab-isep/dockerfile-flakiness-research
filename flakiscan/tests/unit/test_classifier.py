@@ -3,8 +3,8 @@ contribute to flakiness_score."""
 
 import unittest
 
-from flakiscan.scoring.classifier import classify, flakiness_score
 from flakiscan.schema import Category, Finding, Severity, ToolSource
+from flakiscan.scoring.classifier import classify, flakiness_score
 
 
 def finding(rule_id, category, flakiness_relevant=True) -> Finding:
