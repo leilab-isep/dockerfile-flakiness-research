@@ -2,6 +2,7 @@
 
 Usage:
     python3 -m flakiscan.cli path/to/Dockerfile [--json]
+    python3 -m flakiscan.cli path/to/Dockerfile --repair [--in-place] [--json]
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ import json
 import sys
 
 from flakiscan.detection.detector import detect
+from flakiscan.refactoring.engine import repair_dockerfile
 from flakiscan.scoring.classifier import classify, flakiness_score
 
 
@@ -61,11 +63,34 @@ def _print_human(report: dict) -> None:
         )
 
 
+def _print_repair_summary(report) -> None:
+    for action in report.actions:
+        if action.applied_rule_ids:
+            print(f"  L{action.line_number} ({action.instruction}): fixed {', '.join(action.applied_rule_ids)}", file=sys.stderr)
+        if action.fallback_rule_ids:
+            print(f"  L{action.line_number} ({action.instruction}): left as TODO: {', '.join(action.fallback_rule_ids)}", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Analyze a Dockerfile for build-flakiness risks.")
     parser.add_argument("dockerfile", help="Path to the Dockerfile to analyze.")
     parser.add_argument("--json", action="store_true", help="Print the raw JSON report instead of the human-readable summary.")
+    parser.add_argument("--repair", action="store_true", help="Attempt to automatically fix findings and print the patched Dockerfile.")
+    parser.add_argument("--in-place", action="store_true", help="With --repair, overwrite the input file instead of printing to stdout.")
     args = parser.parse_args(argv)
+
+    if args.repair:
+        report = repair_dockerfile(args.dockerfile)
+        if args.json:
+            print(json.dumps(report.to_dict(), indent=2))
+        elif args.in_place:
+            with open(args.dockerfile, "w", encoding="utf-8") as f:
+                f.write(report.patched_text)
+            _print_repair_summary(report)
+        else:
+            print(report.patched_text, end="")
+            _print_repair_summary(report)
+        return 0
 
     report = analyze(args.dockerfile)
 

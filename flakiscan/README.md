@@ -7,10 +7,10 @@ retagged, a package version became unavailable, or a remote script changed).
 FlakiScan finds these patterns through static analysis of the Dockerfile source; it
 does not build the image and does not observe actual build outcomes over time.
 
-FlakiScan currently covers **detection and scoring**: it runs three independent
-analyzers, combines their output into one report, and computes a numeric risk score.
-Automated repair of detected issues is not yet implemented (see
-[Roadmap](#roadmap)).
+FlakiScan covers **detection, scoring, and automated repair**: it runs three
+independent analyzers, combines their output into one report, computes a numeric risk
+score, and can rewrite the Dockerfile to fix what it safely can. Validating a repaired
+Dockerfile by actually building it is not yet implemented (see [Roadmap](#roadmap)).
 
 ## How it works
 
@@ -33,6 +33,12 @@ the sum of the weights (`error` = 3, `warning` = 1, `info` = 0) of every finding
 flagged as relevant to flakiness; `best_practice` findings are reported but excluded
 from the score.
 
+With `--repair`, each finding is passed to a repair rule that either rewrites the
+affected instruction (for example, pinning a base image to a digest, or adding a
+missing package-manager flag) or, if it has no automated fix or a required external
+lookup fails, leaves a `# TODO(flakiscan)` comment above the instruction instead of
+silently dropping the finding. See [Repairing findings](#repairing-findings).
+
 ```
 flakiscan/
 ├── schema.py                     # Finding, Category, Severity data types
@@ -47,6 +53,10 @@ flakiscan/
 │   └── detector.py               # Orchestrates the three analyzers
 ├── scoring/
 │   └── classifier.py             # Assigns severity/weight and computes flakiness_score
+├── refactoring/
+│   ├── resolvers.py              # Network lookups (package versions, image digests, git tags)
+│   ├── rules.py                  # One repair function per group of related findings
+│   └── engine.py                 # Applies repairs and produces a patched Dockerfile
 ├── cli.py                        # Command-line interface
 └── tests/                        # unittest suite
 ```
@@ -138,6 +148,38 @@ comment suppresses findings on the line directly below it, not necessarily the
 instruction's first line -- place it directly above whichever line the finding is
 reported on.
 
+## Repairing findings
+
+```bash
+python3 -m flakiscan.cli path/to/Dockerfile --repair              # print the patched Dockerfile to stdout
+python3 -m flakiscan.cli path/to/Dockerfile --repair --in-place   # overwrite the file
+python3 -m flakiscan.cli path/to/Dockerfile --repair --json       # patched text plus a per-instruction change log
+```
+
+A repair only ever rewrites the specific instruction a finding was reported on -- it
+never adds, removes, or reorders other instructions. Some repairs need a value this
+tool cannot determine from the Dockerfile alone, so they look it up: a base image's
+current digest (Docker Hub only), a Python/Node.js/Ruby package's current version (via
+PyPI, the npm registry, or RubyGems), a GitHub repository's latest tag, or the sha256
+of a file the Dockerfile downloads. When a lookup fails -- no network access, the
+package or repository doesn't exist, the base image isn't on Docker Hub -- the finding
+is left in place with a `# TODO(flakiscan)` comment explaining what could not be fixed,
+rather than guessing at a value.
+
+A few findings never have an automated fix and always get a `# TODO` comment:
+
+- **`arg_no_default`**: the correct value for an `ARG` with no default depends on how
+  the image is built (`--build-arg`), which this tool has no way to know.
+- **`ruleMoreThanOneInstall`**: merging separate install commands into one would mean
+  editing more than the single flagged instruction, which this engine does not do.
+- **Version pinning for apt, apk, yum, zypper, and dnf packages**: unlike PyPI, npm,
+  and RubyGems, these package managers have no registry API that returns "the current
+  version" independent of the base image's specific OS release and configured mirrors.
+
+Running `--repair` again on an already-repaired Dockerfile is safe: findings that were
+already fixed are not detected a second time, and re-running never duplicates a
+`# TODO` comment or produces a different result for the same, unfixable finding.
+
 ## Limitations
 
 - FlakiScan detects **patterns associated with flakiness risk**, such as an unpinned
@@ -154,6 +196,15 @@ reported on.
 - Custom-rule pattern matching operates on instruction text with simple heuristics
   (for example, treating `&&`, `;`, and `|` as command separators). It can miss or
   misclassify unusual shell constructs, quoting, or variable expansion.
+- Repairs are not build-verified. FlakiScan does not build the patched Dockerfile to
+  confirm the fix actually works -- review a patch before relying on it, especially one
+  that pins a version or digest.
+- A repaired instruction spanning multiple physical lines (via a trailing `\`) is
+  rewritten onto a single line. The fix is correct, but the original line-wrapping is
+  not preserved.
+- Pinning a git clone to a tag only recognizes `github.com` URLs, and appends the
+  `git checkout` at the end of the RUN instruction -- if a later command in the same
+  instruction changes to a different directory, the checkout can run in the wrong one.
 
 ## Development
 
@@ -165,7 +216,10 @@ python3 -m unittest discover -s flakiscan/tests -p "test_*.py" -v
 
 No test framework beyond the standard library is required. Tests for the Hadolint and
 Docker Parfum adapters are skipped automatically if the corresponding tool is not
-installed; every other test runs unconditionally.
+installed; every other test runs unconditionally. Tests that exercise repair rules
+needing a network lookup pass in a fake `Resolvers` instance instead of the real one
+(see `refactoring/resolvers.py`), so the suite never depends on network access or the
+availability of any third-party service.
 
 ## Troubleshooting
 
@@ -178,13 +232,17 @@ installed; every other test runs unconditionally.
 - **A finding you expected to see is missing**: check for a `# flakiscan-ignore`
   comment above that line, and confirm the rule is one FlakiScan reports on (see
   `RULE_CATEGORIES` in `hadolint_adapter.py` / `parfum_adapter.py`).
+- **`--repair` left a `# TODO(flakiscan)` comment instead of fixing something**: the
+  comment names which rule(s) could not be fixed. If it lists a rule that pins a
+  version, digest, or tag, the most common cause is that the required lookup failed --
+  confirm you have network access and that the package, image, or repository referenced
+  actually exists. Some rules (listed in [Repairing findings](#repairing-findings))
+  never have an automated fix and will always show a TODO.
 
 ## Roadmap
 
 Not yet implemented:
 
-- **Automated repair**: deterministic patches for detected findings (for example,
-  pinning a base image to a digest, or adding a missing checksum verification step).
 - **Patch validation**: rebuilding a patched Dockerfile and comparing the outcome
   against the original build to confirm a patch does not introduce a new failure. This
   would be the only part of FlakiScan that builds the analyzed image.
