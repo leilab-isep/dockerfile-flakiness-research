@@ -86,6 +86,23 @@ class TestBuild(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertTrue(result.timed_out)
 
+    def test_timeout_with_undecoded_bytes_output_does_not_raise(self):
+        # subprocess.TimeoutExpired carries the raw, undecoded bytes captured before
+        # the timeout even when the call used text=True -- this is what a real timeout
+        # looks like, unlike the str output used in the test above.
+        with (
+            patch("shutil.which", return_value="/usr/bin/docker"),
+            patch(
+                "subprocess.run",
+                side_effect=subprocess.TimeoutExpired(cmd="docker build", timeout=1, output=b"partial stdout", stderr=b"partial stderr"),
+            ),
+        ):
+            result = builder.build("Dockerfile", ".", timeout_seconds=1, cleanup=False)
+
+        self.assertFalse(result.success)
+        self.assertTrue(result.timed_out)
+        self.assertEqual(result.log, "partial stdoutpartial stderr")
+
     def test_successful_build_is_cleaned_up_by_default(self):
         run_mock = MagicMock(return_value=_fake_process(0))
         with patch("shutil.which", return_value="/usr/bin/docker"), patch("subprocess.run", run_mock):

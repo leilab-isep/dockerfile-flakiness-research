@@ -40,6 +40,21 @@ def _looks_like_daemon_unreachable(log: str) -> bool:
     return any(marker in lowered for marker in _DAEMON_UNREACHABLE_MARKERS)
 
 
+def _decode(value: str | bytes | None) -> str:
+    """Normalize captured subprocess output to str.
+
+    `subprocess.TimeoutExpired.stdout`/`.stderr` carry the raw, undecoded bytes
+    collected before the timeout even when the call used `text=True` -- only a
+    completed `communicate()` decodes them. Without this, concatenating a decoded
+    empty string with an undecoded bytes value raises TypeError.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
 def _image_size_bytes(tag: str) -> int | None:
     """Return the built image's size in bytes, or None if it cannot be determined."""
     proc = subprocess.run(
@@ -89,7 +104,7 @@ def build(
         log = proc.stdout + proc.stderr
         success = proc.returncode == 0
     except subprocess.TimeoutExpired as exc:
-        log = (exc.stdout or "") + (exc.stderr or "")
+        log = _decode(exc.stdout) + _decode(exc.stderr)
         success = False
         timed_out = True
 
