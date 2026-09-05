@@ -2,11 +2,12 @@ name: Validation CI
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
     paths:
       - "validation/**"
       - ".github/workflows/validation-ci.yml"
   pull_request:
+    branches: ["main"]
     paths:
       - "validation/**"
       - ".github/workflows/validation-ci.yml"
