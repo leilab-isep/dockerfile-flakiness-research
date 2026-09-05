@@ -1,0 +1,122 @@
+[
+  {
+    "owner": "komljen",
+    "repo": "dockerfile-examples",
+    "url": "https://github.com/komljen/dockerfile-examples"
+  },
+  {
+    "owner": "devopshobbies",
+    "repo": "docker-templates",
+    "url": "https://github.com/devopshobbies/docker-templates"
+  },
+  {
+    "owner": "kristiyan-velkov",
+    "repo": "frontend-production-dockerfiles",
+    "url": "https://github.com/kristiyan-velkov/frontend-production-dockerfiles"
+  },
+  {
+    "owner": "zabbix",
+    "repo": "zabbix-docker",
+    "url": "https://github.com/zabbix/zabbix-docker"
+  },
+  {
+    "owner": "emmanuelgautier",
+    "repo": "awesome-dockerfiles",
+    "url": "https://github.com/emmanuelgautier/awesome-dockerfiles"
+  },
+  {
+    "owner": "dockerfile",
+    "repo": "ubuntu",
+    "url": "https://github.com/dockerfile/ubuntu"
+  },
+  {
+    "owner": "dockerfile",
+    "repo": "nginx",
+    "url": "https://github.com/dockerfile/nginx"
+  },
+  {
+    "owner": "docker-library",
+    "repo": "httpd",
+    "url": "https://github.com/docker-library/httpd"
+  },
+  {
+    "owner": "docker-library",
+    "repo": "mysql",
+    "url": "https://github.com/docker-library/mysql"
+  },
+  {
+    "owner": "docker-library",
+    "repo": "ruby",
+    "url": "https://github.com/docker-library/ruby"
+  },
+  {
+    "owner": "fluent",
+    "repo": "fluentd-docker-image",
+    "url": "https://github.com/fluent/fluentd-docker-image"
+  },
+  {
+    "owner": "theforeman",
+    "repo": "foreman",
+    "url": "https://github.com/theforeman/foreman"
+  },
+  {
+    "owner": "redis",
+    "repo": "docker-library-redis",
+    "url": "https://github.com/redis/docker-library-redis"
+  },
+  {
+    "owner": "chef",
+    "repo": "chef",
+    "url": "https://github.com/chef/chef"
+  },
+  {
+    "owner": "jenkinsci",
+    "repo": "docker-agents",
+    "url": "https://github.com/jenkinsci/docker-agents"
+  },
+  {
+    "owner": "docker-library",
+    "repo": "wordpress",
+    "url": "https://github.com/docker-library/wordpress"
+  },
+  {
+    "owner": "docker-library",
+    "repo": "php",
+    "url": "https://github.com/docker-library/php"
+  },
+  {
+    "owner": "docker-library",
+    "repo": "python",
+    "url": "https://github.com/docker-library/python"
+  },
+  {
+    "owner": "docker-library",
+    "repo": "postgres",
+    "url": "https://github.com/docker-library/postgres"
+  },
+  {
+    "owner": "docker-library",
+    "repo": "openjdk",
+    "url": "https://github.com/docker-library/openjdk"
+  },
+  {
+    "owner": "grafana",
+    "repo": "grafana",
+    "url": "https://github.com/grafana/grafana"
+  },
+  {
+    "owner": "openresty",
+    "repo": "docker-openresty",
+    "url": "https://github.com/openresty/docker-openresty"
+  },
+  {
+    "owner": "jekyll",
+    "repo": "jekyll",
+    "url": "https://github.com/jekyll/jekyll"
+  },
+  {
+    "owner": "cypress-io",
+    "repo": "cypress-docker-images",
+    "url": "https://github.com/cypress-io/cypress-docker-images"
+  }
+]
