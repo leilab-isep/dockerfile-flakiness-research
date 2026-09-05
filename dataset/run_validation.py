@@ -63,7 +63,7 @@ def truncate_log(log: str) -> str:
     return "...(truncated)...\n" + log[-MAX_LOG_CHARS:]
 
 
-def process_entry(entry: dict, repo_dir: Path, commit: str, timeout: float) -> dict:
+def process_entry(entry: dict, repo_dir: Path, commit: str, timeout: float, files_dir: Path | None) -> dict:
     base = {
         "owner": entry["owner"],
         "repo": entry["repo"],
@@ -75,10 +75,18 @@ def process_entry(entry: dict, repo_dir: Path, commit: str, timeout: float) -> d
     if not original_path.is_file():
         return {**base, "error": "source file no longer present at this path in the repo"}
 
+    saved_files_dir = files_dir / entry["dataset_path"] if files_dir else None
+    if saved_files_dir:
+        saved_files_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(original_path, saved_files_dir / "original.Dockerfile")
+
     try:
         report = repair_dockerfile(str(original_path))
     except Exception as exc:  # detection tooling (Hadolint/Parfum) can crash on unusual syntax
         return {**base, "error": f"repair_dockerfile failed: {exc!r}"}
+
+    if saved_files_dir:
+        (saved_files_dir / "patched.Dockerfile").write_text(report.patched_text)
 
     patched_path = original_path.with_name(original_path.name + ".flakiscan-patched")
     try:
@@ -184,7 +192,16 @@ def main() -> int:
     parser.add_argument("--only", help="Comma-separated owner/repo pairs to run, for testing a subset (default: all)")
     parser.add_argument("--limit", type=int, help="Stop after this many Dockerfiles total (default: no limit)")
     parser.add_argument("--workers", type=int, default=4, help="Number of Dockerfiles to build concurrently (default: 4)")
+    parser.add_argument(
+        "--files-dir",
+        type=Path,
+        default=Path(__file__).parent / "validation_files",
+        help="Where to save each Dockerfile's original and patched text, one subdirectory per manifest entry "
+        "(default: dataset/validation_files)",
+    )
+    parser.add_argument("--no-save-files", action="store_true", help="Don't save original/patched Dockerfile text")
     args = parser.parse_args()
+    files_dir = None if args.no_save_files else args.files_dir
 
     if not builder.is_available():
         print("docker binary not found on PATH; install Docker to run validation", file=sys.stderr)
@@ -229,7 +246,7 @@ def main() -> int:
                     "source_path": entry["source_path"],
                     "error": "git clone failed",
                 }
-            return process_entry(entry, repo_dir, commit, args.timeout)
+            return process_entry(entry, repo_dir, commit, args.timeout, files_dir)
         finally:
             pool.release(owner, repo)
 

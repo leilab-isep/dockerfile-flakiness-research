@@ -89,13 +89,16 @@ jobs:
             --timeout "${{ inputs.timeout_seconds || '300' }}" \
             --workers "${{ inputs.workers || '4' }}" \
             ${{ inputs.limit && format('--limit {0}', inputs.limit) || '' }} \
-            --output "dataset/validation-${{ matrix.slug }}.json"
+            --output "dataset/validation-${{ matrix.slug }}.json" \
+            --files-dir "dataset/validation_files"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: validation-${{ matrix.slug }}
-          path: dataset/validation-${{ matrix.slug }}.json
+          path: |
+            dataset/validation-${{ matrix.slug }}.json
+            dataset/validation_files/
           if-no-files-found: warn
 
   merge:
@@ -127,7 +130,12 @@ jobs:
           print(f"Merged {len(merged)} entries from {len(files)} repo result files")
           EOF
 
+      - name: Move merged Dockerfile pairs alongside the results
+        run: mv artifacts/validation_files validation_files 2>/dev/null || mkdir -p validation_files
+
       - uses: actions/upload-artifact@v4
         with:
           name: validation-results
-          path: validation_results.json
+          path: |
+            validation_results.json
+            validation_files/
