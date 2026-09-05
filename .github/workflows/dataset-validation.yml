@@ -1,0 +1,133 @@
+name: Dataset Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      repos:
+        description: "Comma-separated owner/repo pairs to run (default: all repos in dataset/repositories.json)"
+        required: false
+        default: ""
+      timeout_seconds:
+        description: "Per-build timeout in seconds"
+        required: false
+        default: "300"
+      limit:
+        description: "Limit Dockerfiles per repo, for a quick test run across all repos"
+        required: false
+        default: ""
+      workers:
+        description: "Concurrent Dockerfile builds per repo job"
+        required: false
+        default: "4"
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+  HADOLINT_VERSION: "2.14.0"
+
+jobs:
+  discover:
+    name: Build repo matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: set
+        env:
+          REPOS_FILTER: ${{ inputs.repos }}
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+
+          repos = json.load(open("dataset/repositories.json"))
+          wanted = [r.strip() for r in os.environ.get("REPOS_FILTER", "").split(",") if r.strip()]
+          if wanted:
+              repos = [r for r in repos if f"{r['owner']}/{r['repo']}" in wanted]
+
+          matrix = [{"repo": f"{r['owner']}/{r['repo']}", "slug": f"{r['owner']}__{r['repo']}"} for r in repos]
+          print("matrix=" + json.dumps(matrix))
+          EOF
+
+  validate:
+    name: Validate ${{ matrix.repo }}
+    needs: discover
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.discover.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Hadolint
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL -o "$HOME/.local/bin/hadolint" \
+            "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64"
+          chmod +x "$HOME/.local/bin/hadolint"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install Docker Parfum
+        run: npm install -g @tdurieux/docker-parfum
+
+      - name: Run validation for ${{ matrix.repo }}
+        run: |
+          python3 dataset/run_validation.py \
+            --only "${{ matrix.repo }}" \
+            --timeout "${{ inputs.timeout_seconds || '300' }}" \
+            --workers "${{ inputs.workers || '4' }}" \
+            ${{ inputs.limit && format('--limit {0}', inputs.limit) || '' }} \
+            --output "dataset/validation-${{ matrix.slug }}.json"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validation-${{ matrix.slug }}
+          path: dataset/validation-${{ matrix.slug }}.json
+          if-no-files-found: warn
+
+  merge:
+    name: Merge results
+    needs: validate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "validation-*"
+          path: artifacts
+          merge-multiple: true
+
+      - name: Merge per-repo results into one JSON file
+        run: |
+          python3 - <<'EOF'
+          import glob
+          import json
+
+          files = sorted(glob.glob("artifacts/*.json"))
+          merged = []
+          for path in files:
+              merged.extend(json.load(open(path)))
+
+          with open("validation_results.json", "w") as f:
+              json.dump(merged, f, indent=2)
+
+          print(f"Merged {len(merged)} entries from {len(files)} repo result files")
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validation-results
+          path: validation_results.json
