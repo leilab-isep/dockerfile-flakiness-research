@@ -29,10 +29,19 @@ class TestBuild(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertFalse(result.timed_out)
 
+    def test_successful_build_reports_a_real_image_size(self):
+        result = builder.build(str(FIXTURES / "healthy.Dockerfile"), str(FIXTURES))
+        self.assertIsNotNone(result.image_size_bytes)
+        self.assertGreater(result.image_size_bytes, 0)
+
     def test_broken_dockerfile_fails(self):
         result = builder.build(str(FIXTURES / "broken.Dockerfile"), str(FIXTURES))
         self.assertFalse(result.success)
         self.assertIn("this-command-does-not-exist", result.log)
+
+    def test_failed_build_has_no_image_size(self):
+        result = builder.build(str(FIXTURES / "broken.Dockerfile"), str(FIXTURES))
+        self.assertIsNone(result.image_size_bytes)
 
     def test_built_image_is_removed_after_success(self):
         import subprocess

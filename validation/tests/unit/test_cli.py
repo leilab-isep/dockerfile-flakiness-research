@@ -12,11 +12,21 @@ from flakiscan_validate.builder import DockerUnavailableError
 from flakiscan_validate.result import BuildResult, Outcome, ValidationResult
 
 
-def _result(outcome: Outcome, original_success: bool, modified_success: bool) -> ValidationResult:
+def _result(
+    outcome: Outcome,
+    original_success: bool,
+    modified_success: bool,
+    original_size: int | None = None,
+    modified_size: int | None = None,
+) -> ValidationResult:
     return ValidationResult(
         outcome=outcome,
-        original=BuildResult(success=original_success, log="original log", duration_seconds=1.0),
-        modified=BuildResult(success=modified_success, log="modified log", duration_seconds=1.0),
+        original=BuildResult(
+            success=original_success, log="original log", duration_seconds=1.0, image_size_bytes=original_size
+        ),
+        modified=BuildResult(
+            success=modified_success, log="modified log", duration_seconds=1.0, image_size_bytes=modified_size
+        ),
     )
 
 
@@ -53,6 +63,28 @@ class TestMain(unittest.TestCase):
             ):
                 exit_code = cli.main(["orig.Dockerfile", "mod.Dockerfile"])
         self.assertEqual(exit_code, 1)
+
+    def test_prints_image_sizes_and_delta_when_both_available(self):
+        stdout = io.StringIO()
+        result = _result(Outcome.PRESERVED, True, True, original_size=1_000_000, modified_size=1_500_000)
+        with patch("flakiscan_validate.cli.validate", return_value=result):
+            with redirect_stdout(stdout):
+                cli.main(["orig.Dockerfile", "mod.Dockerfile"])
+
+        output = stdout.getvalue()
+        self.assertIn("976.6KB", output)  # original: 1_000_000 bytes
+        self.assertIn("1.4MB", output)  # modified: 1_500_000 bytes
+        self.assertIn("image size change: +488.3KB", output)
+
+    def test_prints_na_for_missing_image_size(self):
+        stdout = io.StringIO()
+        result = _result(Outcome.REGRESSED, True, False)  # modified failed -> no size
+        with patch("flakiscan_validate.cli.validate", return_value=result):
+            with redirect_stdout(stdout):
+                cli.main(["orig.Dockerfile", "mod.Dockerfile"])
+
+        self.assertIn("n/a", stdout.getvalue())
+        self.assertNotIn("image size change", stdout.getvalue())
 
     def test_json_output(self):
         stdout = io.StringIO()

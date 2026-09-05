@@ -40,6 +40,21 @@ def _looks_like_daemon_unreachable(log: str) -> bool:
     return any(marker in lowered for marker in _DAEMON_UNREACHABLE_MARKERS)
 
 
+def _image_size_bytes(tag: str) -> int | None:
+    """Return the built image's size in bytes, or None if it cannot be determined."""
+    proc = subprocess.run(
+        ["docker", "image", "inspect", tag, "--format", "{{.Size}}"],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return None
+    try:
+        return int(proc.stdout.strip())
+    except ValueError:
+        return None
+
+
 def build(
     dockerfile_path: str,
     context_dir: str,
@@ -50,10 +65,12 @@ def build(
     """Run `docker build -f dockerfile_path context_dir` and report the outcome.
 
     `tag` defaults to a randomly generated name; pass one explicitly to keep the built
-    image afterward (with `cleanup=False`). Raises DockerUnavailableError if the
-    `docker` binary is not on PATH, or DockerDaemonUnavailableError if the build
-    could not reach a running Docker daemon -- neither is treated as a build failure,
-    since both mean no conclusion about the Dockerfile itself can be drawn.
+    image afterward (with `cleanup=False`). On success, the returned BuildResult's
+    `image_size_bytes` is read before the image is removed, so it is available even
+    with the default `cleanup=True`. Raises DockerUnavailableError if the `docker`
+    binary is not on PATH, or DockerDaemonUnavailableError if the build could not
+    reach a running Docker daemon -- neither is treated as a build failure, since both
+    mean no conclusion about the Dockerfile itself can be drawn.
     """
     if not is_available():
         raise DockerUnavailableError("docker binary not found on PATH; install Docker to use flakiscan_validate")
@@ -81,7 +98,15 @@ def build(
     if not success and _looks_like_daemon_unreachable(log):
         raise DockerDaemonUnavailableError(f"docker build could not reach a running daemon: {log.strip()[-500:]}")
 
+    image_size = _image_size_bytes(image_tag) if success else None
+
     if success and cleanup:
         subprocess.run(["docker", "rmi", "-f", image_tag], capture_output=True, text=True)
 
-    return BuildResult(success=success, log=log, duration_seconds=duration, timed_out=timed_out)
+    return BuildResult(
+        success=success,
+        log=log,
+        duration_seconds=duration,
+        timed_out=timed_out,
+        image_size_bytes=image_size,
+    )

@@ -14,10 +14,36 @@ from flakiscan_validate.builder import DockerDaemonUnavailableError, DockerUnava
 from flakiscan_validate.validator import validate
 
 
+def _format_size(size_bytes: int | None) -> str:
+    if size_bytes is None:
+        return "n/a"
+    size = float(size_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.1f}{unit}"
+        size /= 1024
+    return f"{size:.1f}GB"
+
+
+def _format_delta(delta_bytes: int | None) -> str:
+    if delta_bytes is None:
+        return "n/a"
+    sign = "+" if delta_bytes >= 0 else "-"
+    return f"{sign}{_format_size(abs(delta_bytes))}"
+
+
 def _print_human(result) -> None:
     print(f"Outcome: {result.outcome.value}")
-    print(f"  original: {'success' if result.original.success else 'FAILED'} ({result.original.duration_seconds:.1f}s)")
-    print(f"  modified: {'success' if result.modified.success else 'FAILED'} ({result.modified.duration_seconds:.1f}s)")
+    print(
+        f"  original: {'success' if result.original.success else 'FAILED'} "
+        f"({result.original.duration_seconds:.1f}s, {_format_size(result.original.image_size_bytes)})"
+    )
+    print(
+        f"  modified: {'success' if result.modified.success else 'FAILED'} "
+        f"({result.modified.duration_seconds:.1f}s, {_format_size(result.modified.image_size_bytes)})"
+    )
+    if result.image_size_delta_bytes is not None:
+        print(f"  image size change: {_format_delta(result.image_size_delta_bytes)}")
 
     failed = [(name, r) for name, r in (("original", result.original), ("modified", result.modified)) if not r.success]
     for name, r in failed:

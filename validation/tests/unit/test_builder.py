@@ -16,6 +16,17 @@ def _fake_process(returncode: int, stdout: str = "", stderr: str = "") -> MagicM
     return proc
 
 
+def _dispatch_by_command(responses: dict[tuple, MagicMock], default: MagicMock | None = None):
+    """subprocess.run side_effect that answers based on the command's first two argv
+    tokens (e.g. ("docker", "build") vs ("docker", "image")), so a test can give
+    `docker build`, `docker image inspect`, and `docker rmi` different fake results."""
+
+    def side_effect(argv, **kwargs):
+        return responses.get(tuple(argv[:2]), default or _fake_process(0))
+
+    return side_effect
+
+
 class TestIsAvailable(unittest.TestCase):
     def test_true_when_docker_on_path(self):
         with patch("shutil.which", return_value="/usr/bin/docker"):
@@ -91,6 +102,71 @@ class TestBuild(unittest.TestCase):
 
         rmi_calls = [c for c in run_mock.call_args_list if c.args[0][:2] == ["docker", "rmi"]]
         self.assertEqual(rmi_calls, [])
+
+
+class TestImageSize(unittest.TestCase):
+    def test_successful_build_reports_image_size(self):
+        responses = {
+            ("docker", "build"): _fake_process(0, stdout="Successfully built abc123"),
+            ("docker", "image"): _fake_process(0, stdout="4094717\n"),
+        }
+        with (
+            patch("shutil.which", return_value="/usr/bin/docker"),
+            patch("subprocess.run", side_effect=_dispatch_by_command(responses)),
+        ):
+            result = builder.build("Dockerfile", ".", cleanup=False)
+
+        self.assertEqual(result.image_size_bytes, 4094717)
+
+    def test_failed_build_has_no_image_size(self):
+        with (
+            patch("shutil.which", return_value="/usr/bin/docker"),
+            patch("subprocess.run", return_value=_fake_process(1, stderr="some real build error")),
+        ):
+            result = builder.build("Dockerfile", ".")
+
+        self.assertIsNone(result.image_size_bytes)
+
+    def test_image_size_is_read_before_the_image_is_removed(self):
+        responses = {
+            ("docker", "build"): _fake_process(0),
+            ("docker", "image"): _fake_process(0, stdout="1000\n"),
+        }
+        with (
+            patch("shutil.which", return_value="/usr/bin/docker"),
+            patch("subprocess.run", side_effect=_dispatch_by_command(responses)) as run_mock,
+        ):
+            result = builder.build("Dockerfile", ".")  # cleanup=True by default
+
+        self.assertEqual(result.image_size_bytes, 1000)
+        rmi_calls = [c for c in run_mock.call_args_list if c.args[0][:2] == ["docker", "rmi"]]
+        self.assertEqual(len(rmi_calls), 1)
+
+    def test_image_size_is_none_when_inspect_fails(self):
+        responses = {
+            ("docker", "build"): _fake_process(0),
+            ("docker", "image"): _fake_process(1, stderr="no such image"),
+        }
+        with (
+            patch("shutil.which", return_value="/usr/bin/docker"),
+            patch("subprocess.run", side_effect=_dispatch_by_command(responses)),
+        ):
+            result = builder.build("Dockerfile", ".", cleanup=False)
+
+        self.assertIsNone(result.image_size_bytes)
+
+    def test_image_size_is_none_when_inspect_output_is_not_a_number(self):
+        responses = {
+            ("docker", "build"): _fake_process(0),
+            ("docker", "image"): _fake_process(0, stdout="not-a-number\n"),
+        }
+        with (
+            patch("shutil.which", return_value="/usr/bin/docker"),
+            patch("subprocess.run", side_effect=_dispatch_by_command(responses)),
+        ):
+            result = builder.build("Dockerfile", ".", cleanup=False)
+
+        self.assertIsNone(result.image_size_bytes)
 
 
 if __name__ == "__main__":

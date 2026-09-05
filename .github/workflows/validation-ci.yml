@@ -1,0 +1,127 @@
+name: Validation CI
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "validation/**"
+      - ".github/workflows/validation-ci.yml"
+  pull_request:
+    paths:
+      - "validation/**"
+      - ".github/workflows/validation-ci.yml"
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  lint:
+    name: Lint (ruff + black)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: validation
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: validation/requirements-dev.txt
+
+      - name: Install linters
+        run: pip install -r requirements-dev.txt
+
+      - name: ruff check
+        run: ruff check flakiscan_validate
+
+      - name: black --check
+        run: black --check --diff flakiscan_validate
+
+  build:
+    name: Build package
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: validation
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: validation/requirements-dev.txt
+
+      - name: Install build backend
+        run: pip install -r requirements-dev.txt
+
+      - name: Build wheel and sdist
+        run: python -m build
+
+      - name: Smoke test the built wheel in a clean environment
+        run: |
+          python -m venv /tmp/smoke-venv
+          /tmp/smoke-venv/bin/pip install dist/*.whl
+          /tmp/smoke-venv/bin/flakiscan-validate --help
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flakiscan-validate-dist
+          path: validation/dist/
+
+  test:
+    name: Unit tests + coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: validation
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: validation/requirements-dev.txt
+
+      - name: Install coverage
+        run: pip install -r requirements-dev.txt
+
+      # Unit tests mock subprocess.run, so this never invokes the real docker CLI.
+      - name: Run unit tests with coverage
+        run: >
+          coverage run --source=flakiscan_validate
+          -m unittest discover -s tests/unit -p "test_*.py" -v
+
+      - name: Coverage report (fails below 80%)
+        run: coverage report -m --fail-under=80
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flakiscan-validate-coverage-report
+          path: validation/.coverage
+
+  integration:
+    name: Integration tests (real docker build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: validation
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # GitHub-hosted ubuntu-latest runners ship Docker Engine pre-installed and
+      # running, so no setup step is needed here beyond confirming it's reachable.
+      - name: Verify Docker is available
+        run: docker version
+
+      - name: Run integration tests
+        run: python -m unittest discover -s tests/integration -p "test_*.py" -v

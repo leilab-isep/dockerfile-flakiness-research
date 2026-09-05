@@ -11,6 +11,7 @@ from flakiscan_validate.validator import validate
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 HEALTHY = str(FIXTURES / "healthy.Dockerfile")
 BROKEN = str(FIXTURES / "broken.Dockerfile")
+BIGGER = str(FIXTURES / "bigger.Dockerfile")  # adds a ~1MB file on top of the same base as HEALTHY
 
 
 def _daemon_available() -> bool:
@@ -43,6 +44,20 @@ class TestValidateOutcomeTable(unittest.TestCase):
     def test_both_broken_is_pre_existing_failure(self):
         result = validate(BROKEN, BROKEN)
         self.assertEqual(result.outcome, Outcome.PRE_EXISTING_FAILURE)
+
+
+@unittest.skipUnless(_DAEMON_AVAILABLE, "docker daemon not available")
+class TestImageSizeComparison(unittest.TestCase):
+    def test_size_delta_reflects_a_real_size_increase(self):
+        result = validate(HEALTHY, BIGGER)
+        self.assertEqual(result.outcome, Outcome.PRESERVED)
+        self.assertIsNotNone(result.image_size_delta_bytes)
+        # BIGGER writes an extra ~1MB file on top of the same base image.
+        self.assertGreater(result.image_size_delta_bytes, 900_000)
+
+    def test_size_delta_is_none_when_a_build_fails(self):
+        result = validate(HEALTHY, BROKEN)
+        self.assertIsNone(result.image_size_delta_bytes)
 
 
 if __name__ == "__main__":

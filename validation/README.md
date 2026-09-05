@@ -37,11 +37,22 @@ flakiscan-validate original.Dockerfile modified.Dockerfile
 
 ```
 Outcome: regressed
-  original: success (1.4s)
-  modified: FAILED (0.6s)
+  original: success (1.4s, 13.6MB)
+  modified: FAILED (0.6s, n/a)
 
 --- modified build log (last 40 lines) ---
 ...
+```
+
+Each successful build's image size is read (via `docker image inspect`) before the
+image is discarded, so a `preserved` or `improved` outcome also reports how the image
+size changed:
+
+```
+Outcome: preserved
+  original: success (1.4s, 13.6MB)
+  modified: success (1.6s, 14.6MB)
+  image size change: +1.0MB
 ```
 
 By default both Dockerfiles are built against the original's own directory as the
@@ -55,10 +66,16 @@ flakiscan-validate original.Dockerfile modified.Dockerfile --context ./app --jso
 ```json
 {
   "outcome": "regressed",
-  "original": { "success": true, "log": "...", "duration_seconds": 1.4, "timed_out": false },
-  "modified": { "success": false, "log": "...", "duration_seconds": 0.6, "timed_out": false }
+  "original": { "success": true, "log": "...", "duration_seconds": 1.4, "timed_out": false, "image_size_bytes": 14229504 },
+  "modified": { "success": false, "log": "...", "duration_seconds": 0.6, "timed_out": false, "image_size_bytes": null },
+  "image_size_delta_bytes": null
 }
 ```
+
+`image_size_bytes` is `null` whenever the corresponding build failed -- there is no
+image to measure. `image_size_delta_bytes` (`modified` minus `original`) is `null`
+under the same condition, and is meant for comparing image sizes across many
+validation runs (e.g. "did this class of repair tend to grow the image?").
 
 The process exits `0` for `preserved` and `improved`, and `1` for `regressed` and
 `pre_existing_failure` -- so it can gate a script or CI step on "did this change break
@@ -86,10 +103,28 @@ python3 -m unittest discover -s tests/unit -p "test_*.py"          # no Docker r
 python3 -m unittest discover -s tests/integration -p "test_*.py"   # needs Docker running
 ```
 
-Integration tests build small real images (`tests/fixtures/healthy.Dockerfile` and
-`broken.Dockerfile`, based on `alpine:3.20`) to exercise all four outcomes against the
-real Docker CLI, and are skipped automatically if Docker or its daemon is unavailable.
-Unit tests mock `subprocess.run` and never invoke Docker.
+Integration tests build small real images (`tests/fixtures/healthy.Dockerfile`,
+`broken.Dockerfile`, and `bigger.Dockerfile`, all based on `alpine:3.20`) to exercise
+all four outcomes and the image-size comparison against the real Docker CLI, and are
+skipped automatically if Docker or its daemon is unavailable. Unit tests mock
+`subprocess.run` and never invoke Docker.
+
+Install the pinned tool versions with `pip install -r requirements-dev.txt`, then:
+
+```bash
+ruff check flakiscan_validate
+black --check --diff flakiscan_validate
+coverage run --source=flakiscan_validate -m unittest discover -s tests/unit -p "test_*.py"
+coverage report -m --fail-under=80
+```
+
+### Continuous integration
+
+`.github/workflows/validation-ci.yml` runs on any push or pull request that touches
+`validation/`, as four independent jobs (**lint**, **build**, **test**,
+**integration**) mirroring flakiscan's own workflow. Unlike flakiscan's integration
+job, this one needs no setup step for its external tool: GitHub-hosted `ubuntu-latest`
+runners come with Docker already installed and running.
 
 ## Limitations
 

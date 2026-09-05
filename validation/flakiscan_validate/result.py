@@ -38,12 +38,18 @@ def classify(original_succeeded: bool, modified_succeeded: bool) -> Outcome:
 
 @dataclass
 class BuildResult:
-    """The outcome of a single `docker build` attempt."""
+    """The outcome of a single `docker build` attempt.
+
+    `image_size_bytes` is the built image's size as reported by `docker image
+    inspect` (uncompressed layer size), or None if the build failed and no image
+    exists to measure.
+    """
 
     success: bool
     log: str
     duration_seconds: float
     timed_out: bool = False
+    image_size_bytes: int | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -51,6 +57,7 @@ class BuildResult:
             "log": self.log,
             "duration_seconds": self.duration_seconds,
             "timed_out": self.timed_out,
+            "image_size_bytes": self.image_size_bytes,
         }
 
 
@@ -62,9 +69,18 @@ class ValidationResult:
     original: BuildResult
     modified: BuildResult
 
+    @property
+    def image_size_delta_bytes(self) -> int | None:
+        """`modified` image size minus `original`'s, or None if either build failed
+        and so has no image to measure. Positive means the modified image grew."""
+        if self.original.image_size_bytes is None or self.modified.image_size_bytes is None:
+            return None
+        return self.modified.image_size_bytes - self.original.image_size_bytes
+
     def to_dict(self) -> dict:
         return {
             "outcome": self.outcome.value,
             "original": self.original.to_dict(),
             "modified": self.modified.to_dict(),
+            "image_size_delta_bytes": self.image_size_delta_bytes,
         }
