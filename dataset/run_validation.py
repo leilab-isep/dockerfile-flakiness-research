@@ -14,7 +14,11 @@ For each Dockerfile listed in the manifest, this:
      image size delta.
 
 Results are written incrementally to --output as a JSON array, so a long run can be
-interrupted without losing progress already made.
+interrupted without losing progress already made. After every Dockerfile, `docker
+system prune -af` reclaims BuildKit's cache and any dangling images left behind by that
+Dockerfile's builds -- without it, disk usage climbs across the whole run regardless of
+how small this script's own output is, and eventually exhausts a constrained disk (a
+GitHub Actions runner's, in particular).
 
 Requires Docker running locally. Neither flakiscan nor flakiscan_validate need to be
 installed -- this script adds both package roots to sys.path itself.
@@ -43,6 +47,23 @@ from flakiscan_validate.validator import validate
 from flakiscan_validate.builder import DockerDaemonUnavailableError, DockerUnavailableError
 
 MAX_LOG_CHARS = 4000
+
+
+def prune_docker() -> None:
+    """Reclaim disk used by Docker's build cache and dangling images/containers.
+
+    `builder.build()` already removes each build's own tagged image after inspecting
+    its size, but that only drops the final tag -- BuildKit's layer cache and any
+    dangling intermediate-stage images from multi-stage builds are not freed by that
+    and accumulate across every build in the run. Over a long run (or a repo with many
+    large, multi-stage Dockerfiles) that accumulation -- not this script's own small
+    JSON/text output -- is what exhausts disk. Failures here are logged and swallowed
+    rather than raised, since a failed prune should not abort an otherwise-successful
+    validation run.
+    """
+    proc = subprocess.run(["docker", "system", "prune", "-af"], capture_output=True, text=True)
+    if proc.returncode != 0:
+        print(f"warning: docker system prune failed: {proc.stderr.strip()}", file=sys.stderr)
 
 
 def clone_repo(url: str, dest: Path) -> str | None:
@@ -249,6 +270,7 @@ def main() -> int:
             return process_entry(entry, repo_dir, commit, args.timeout, files_dir)
         finally:
             pool.release(owner, repo)
+            prune_docker()
 
     try:
         with ThreadPoolExecutor(max_workers=args.workers) as executor:

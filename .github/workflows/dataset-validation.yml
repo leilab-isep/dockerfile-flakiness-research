@@ -63,6 +63,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free disk space on the runner
+        # The build-cache pruning run_validation.py does after every Dockerfile keeps
+        # disk usage flat across the run, but a single, exceptionally large build can
+        # still fail on a runner's default ~14GB free before that prune ever runs.
+        # These preinstalled toolchains are unused by this workflow, so removing them
+        # buys extra headroom cheaply. /opt/hostedtoolcache is left alone -- it's what
+        # setup-python/setup-node below actually depend on.
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android
+          sudo apt-get clean
+
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
