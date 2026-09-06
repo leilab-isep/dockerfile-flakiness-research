@@ -396,7 +396,11 @@ def repair_harden_curl_wget(text: str, rule_ids: set[str], resolvers: Resolvers)
 # Fix checksum/signature verification
 # ---------------------------------------------------------------------------
 
-_SHA256_TWO_SPACE_RE = re.compile(r"([a-fA-F0-9]{32,128})  (\S+)")
+# `sha256sum -c` parses its input as "<hash>  <filename>" (two spaces, or one space
+# plus a leading "*" for binary mode) -- a single space between hash and filename is
+# misparsed as part of the filename. The lookahead excludes text that already has two
+# spaces so an already-correct line is left untouched.
+_SHA256_ONE_SPACE_RE = re.compile(r"([a-fA-F0-9]{32,128}) (?!\s)(\S+)")
 _GPG_VERIFY_ASC_RE = re.compile(r"gpg\s+--verify\s+(\S+\.asc)")
 
 
@@ -404,10 +408,10 @@ def repair_fix_checksum_signature(text: str, rule_ids: set[str], resolvers: Reso
     handled: set[str] = set()
     rationale: list[str] = []
 
-    if "sha256sumEchoOneSpaces" in rule_ids and _SHA256_TWO_SPACE_RE.search(text):
-        text = _SHA256_TWO_SPACE_RE.sub(r"\1 \2", text)
+    if "sha256sumEchoOneSpaces" in rule_ids and _SHA256_ONE_SPACE_RE.search(text):
+        text = _SHA256_ONE_SPACE_RE.sub(r"\1  \2", text)
         handled.add("sha256sumEchoOneSpaces")
-        rationale.append("Collapsed the double space between hash and filename to the single space `sha256sum -c` expects.")
+        rationale.append("Expanded the single space between hash and filename to the two spaces `sha256sum -c` expects.")
 
     if "gpgVerifyAscRmAsc" in rule_ids:
         match = _GPG_VERIFY_ASC_RE.search(text)
@@ -523,12 +527,21 @@ _GEM_INSTALL_ANCHOR = re.compile(r"gem\s+install\b")
 def _pin_single_package(text: str, anchor: re.Pattern[str], separator_fmt: str, resolve: Callable[[str], str | None]) -> tuple[str, str, str] | None:
     """Find exactly one unversioned package after `anchor` in `text`, resolve its
     current version, and rewrite it in place. Returns (new_text, package, version), or
-    None if there isn't exactly one resolvable bare package name to pin."""
+    None if there isn't exactly one resolvable bare package name to pin.
+
+    Only the segment up to the next `&&`/`||`/`|`/`;` is considered the package list --
+    an earlier sub-repair in the pipeline (e.g. appending `&& npm cache clean --force`
+    to the same instruction) would otherwise be tokenized right along with it and make
+    an otherwise-unambiguous single package look like multiple, unpinnable ones.
+    """
     match = anchor.search(text)
     if not match:
         return None
     tail = text[match.end() :]
-    tokens = [t for t in tail.split() if not t.startswith("-")]
+    segments = _SEGMENT_SPLIT_RE.split(tail, maxsplit=1)
+    command_tail, rest = segments[0], "".join(segments[1:])
+
+    tokens = [t for t in command_tail.split() if not t.startswith("-")]
     packages = _unversioned_packages(tokens)
     if len(packages) != 1:
         return None  # No package, or more than one -- too ambiguous to pin automatically.
@@ -539,8 +552,8 @@ def _pin_single_package(text: str, anchor: re.Pattern[str], separator_fmt: str, 
         return None
 
     pinned = separator_fmt.format(name=package, version=version)
-    new_tail = tail.replace(package, pinned, 1)
-    return text[: match.end()] + new_tail, package, version
+    new_command_tail = command_tail.replace(package, pinned, 1)
+    return text[: match.end()] + new_command_tail + rest, package, version
 
 
 def repair_pin_package_version(text: str, rule_ids: set[str], resolvers: Resolvers) -> SubRepairResult:

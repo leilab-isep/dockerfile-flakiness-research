@@ -1,0 +1,79 @@
+name: Rules E2E
+
+on:
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+  HADOLINT_VERSION: "2.14.0"
+
+jobs:
+  build:
+    name: Build package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install build backend
+        run: pip install -r requirements-dev.txt
+
+      - name: Build wheel and sdist
+        run: python -m build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flakiscan-dist
+          path: dist/
+
+  e2e:
+    name: End-to-end rule coverage (real Hadolint, Docker Parfum, and network resolvers)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: flakiscan-dist
+          path: dist/
+
+      - name: Install the built wheel
+        run: |
+          python -m venv /tmp/flakiscan-venv
+          /tmp/flakiscan-venv/bin/pip install dist/*.whl
+          echo "/tmp/flakiscan-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install Hadolint
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL -o "$HOME/.local/bin/hadolint" \
+            "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64"
+          chmod +x "$HOME/.local/bin/hadolint"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install Docker Parfum
+        run: npm install -g @tdurieux/docker-parfum
+
+      - name: Verify tools are on PATH
+        run: |
+          flakiscan --help > /dev/null
+          hadolint --version
+          docker-parfum --help > /dev/null
+
+      - name: Run e2e rule coverage tests
+        run: python -m unittest discover -s flakiscan/tests/e2e -p "test_*.py" -v

@@ -179,11 +179,18 @@ class TestHardenCurlWget(unittest.TestCase):
 
 
 class TestFixChecksumSignature(unittest.TestCase):
-    def test_collapses_double_space(self):
+    def test_expands_single_space_to_two(self):
+        # sha256sum -c parses "<hash>  <filename>" (two spaces); a single space is
+        # misparsed as part of the filename, which is what this rule flags.
+        digest = "a" * 64
+        result = rules.repair_fix_checksum_signature(f"RUN echo '{digest} file.tar.gz' | sha256sum -c", {"sha256sumEchoOneSpaces"}, NO_NETWORK)
+        self.assertIn(f"{digest}  file.tar.gz", result.text)
+        self.assertEqual(result.handled_rule_ids, {"sha256sumEchoOneSpaces"})
+
+    def test_leaves_already_correct_double_space_untouched(self):
         digest = "a" * 64
         result = rules.repair_fix_checksum_signature(f"RUN echo '{digest}  file.tar.gz' | sha256sum -c", {"sha256sumEchoOneSpaces"}, NO_NETWORK)
-        self.assertIn(f"{digest} file.tar.gz", result.text)
-        self.assertEqual(result.handled_rule_ids, {"sha256sumEchoOneSpaces"})
+        self.assertEqual(result.handled_rule_ids, set())
 
     def test_appends_asc_removal(self):
         result = rules.repair_fix_checksum_signature("RUN gpg --verify file.tar.gz.asc file.tar.gz", {"gpgVerifyAscRmAsc"}, NO_NETWORK)
@@ -249,6 +256,17 @@ class TestPinPackageVersion(unittest.TestCase):
         resolvers = Resolvers(rubygems_latest_version=lambda gem: "7.1.0")
         result = rules.repair_pin_package_version("RUN gem install rails", {"DL3028"}, resolvers)
         self.assertEqual(result.text, "RUN gem install rails -v 7.1.0")
+
+    def test_pins_npm_package_even_after_a_cache_clean_suffix_was_already_appended(self):
+        # Regression: repair_add_cache_cleanup runs earlier in SUB_REPAIRS and appends
+        # "&& npm cache clean --force" to this same instruction whenever
+        # npmCacheCleanAfterInstall also fires (true for almost every bare `npm
+        # install`), which it does. A naive tail.split() would treat "&&" as part of
+        # the package list and bail out as ambiguous.
+        resolvers = Resolvers(npm_latest_version=lambda pkg: "4.17.21")
+        result = rules.repair_pin_package_version("RUN npm install lodash && npm cache clean --force", {"DL3016"}, resolvers)
+        self.assertEqual(result.text, "RUN npm install lodash@4.17.21 && npm cache clean --force")
+        self.assertEqual(result.handled_rule_ids, {"DL3016"})
 
     def test_apt_apk_yum_zypper_dnf_always_defer(self):
         for rule_id, command in [
