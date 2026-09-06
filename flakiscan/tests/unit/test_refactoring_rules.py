@@ -192,6 +192,13 @@ class TestFixChecksumSignature(unittest.TestCase):
         result = rules.repair_fix_checksum_signature(f"RUN echo '{digest}  file.tar.gz' | sha256sum -c", {"sha256sumEchoOneSpaces"}, NO_NETWORK)
         self.assertEqual(result.handled_rule_ids, set())
 
+    def test_leaves_binary_mode_checksum_untouched(self):
+        digest = "a" * 64
+        text = f"RUN echo '{digest} *file.tar.gz' | sha256sum -c"
+        result = rules.repair_fix_checksum_signature(text, {"sha256sumEchoOneSpaces"}, NO_NETWORK)
+        self.assertEqual(result.handled_rule_ids, set())
+        self.assertEqual(result.text, text)
+
     def test_appends_asc_removal(self):
         result = rules.repair_fix_checksum_signature("RUN gpg --verify file.tar.gz.asc file.tar.gz", {"gpgVerifyAscRmAsc"}, NO_NETWORK)
         self.assertIn("rm -f file.tar.gz.asc", result.text)

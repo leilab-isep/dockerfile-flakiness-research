@@ -63,6 +63,12 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           curl -sSL -o "$HOME/.local/bin/hadolint" \
             "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64"
+          curl -sSL -o "$HOME/.local/bin/hadolint.sha256" \
+            "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64.sha256"
+          (
+            cd "$HOME/.local/bin"
+            sha256sum -c hadolint.sha256
+          )
           chmod +x "$HOME/.local/bin/hadolint"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
