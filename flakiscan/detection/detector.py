@@ -1,9 +1,15 @@
 """Runs Hadolint, Parfum, and the custom rule engine, and merges their findings.
 
-The three sources run concurrently and share no state, so a slow or unavailable source
-never blocks the others. A missing tool is recorded as a warning and skipped rather than
-failing the whole run, so detection still completes with whichever sources are
-available. This module never invokes `docker build` or otherwise runs the analyzed
+The three sources run concurrently and share no state, so a slow, unavailable, or
+crashing source never blocks the others. A missing tool, or one that raises while
+analyzing this particular Dockerfile, is recorded as a warning and skipped rather than
+failing the whole run, so detection still completes with whichever sources produced a
+result. Parfum's underlying parser in particular can throw on real-world syntax it does
+not support (PowerShell RUN commands in Windows-based Dockerfiles, some embedded-shell
+constructs) -- that is a limitation of the third-party tool, not something this project
+can fix, so it is treated the same way as the tool being unavailable rather than
+allowed to take down Hadolint's and the custom engine's otherwise-valid findings for the
+same file. This module never invokes `docker build` or otherwise runs the analyzed
 Dockerfile -- detection is static analysis only.
 """
 
@@ -30,13 +36,19 @@ class DetectionResult:
 def _run_hadolint(dockerfile_path: str, ignore_map: IgnoreMap) -> tuple[list[dict], str | None]:
     if not hadolint_adapter.is_available():
         return [], "hadolint not available; skipped (see hadolint_adapter.is_available)"
-    return hadolint_adapter.run(dockerfile_path, ignore_map), None
+    try:
+        return hadolint_adapter.run(dockerfile_path, ignore_map), None
+    except Exception as exc:
+        return [], f"hadolint crashed analyzing this file and was skipped: {exc}"
 
 
 def _run_parfum(dockerfile_path: str, ignore_map: IgnoreMap) -> tuple[list[dict], str | None]:
     if not parfum_adapter.is_available():
         return [], "docker-parfum not available; skipped (see parfum_adapter.is_available)"
-    return parfum_adapter.run(dockerfile_path, ignore_map), None
+    try:
+        return parfum_adapter.run(dockerfile_path, ignore_map), None
+    except Exception as exc:
+        return [], f"docker-parfum crashed analyzing this file and was skipped: {exc}"
 
 
 def detect(dockerfile_path: str) -> DetectionResult:

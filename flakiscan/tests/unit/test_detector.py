@@ -70,6 +70,38 @@ class TestDetect(unittest.TestCase):
         custom_findings = [f for f in result.findings if f.tool_source.value == "custom"]
         self.assertTrue(custom_findings)
 
+    def test_still_returns_hadolint_findings_when_parfum_crashes(self):
+        # A Parfum crash (its underlying parser cannot handle every real-world
+        # Dockerfile, e.g. Windows/PowerShell RUN commands) must not take down
+        # Hadolint's or the custom engine's otherwise-valid findings for the same file.
+        with (
+            patch("flakiscan.detection.hadolint_adapter.is_available", return_value=True),
+            patch("flakiscan.detection.hadolint_adapter.run", return_value=[_raw("DL3007", 1)]),
+            patch("flakiscan.detection.parfum_adapter.is_available", return_value=True),
+            patch("flakiscan.detection.parfum_adapter.run", side_effect=RuntimeError("docker-parfum failed: boom")),
+        ):
+            result = detector.detect(FIXTURE)
+
+        rule_ids = {f.rule_id for f in result.findings}
+        self.assertIn("DL3007", rule_ids)
+        self.assertEqual(len(result.warnings), 1)
+        self.assertIn("docker-parfum", result.warnings[0])
+        self.assertIn("boom", result.warnings[0])
+
+    def test_still_returns_parfum_findings_when_hadolint_crashes(self):
+        with (
+            patch("flakiscan.detection.hadolint_adapter.is_available", return_value=True),
+            patch("flakiscan.detection.hadolint_adapter.run", side_effect=RuntimeError("hadolint exploded")),
+            patch("flakiscan.detection.parfum_adapter.is_available", return_value=True),
+            patch("flakiscan.detection.parfum_adapter.run", return_value=[_raw("curlUseFlagF", 3)]),
+        ):
+            result = detector.detect(FIXTURE)
+
+        rule_ids = {f.rule_id for f in result.findings}
+        self.assertIn("curlUseFlagF", rule_ids)
+        self.assertEqual(len(result.warnings), 1)
+        self.assertIn("hadolint", result.warnings[0])
+
     def test_duration_is_recorded(self):
         with (
             patch("flakiscan.detection.hadolint_adapter.is_available", return_value=False),

@@ -18,6 +18,7 @@ from flakiscan.detection.ignore_comments import IgnoreMap, filter_ignored
 from flakiscan.schema import Category
 
 _RUNNER_SCRIPT = Path(__file__).with_name("parfum_runner.js")
+_MAX_ERROR_CHARS = 500
 
 # Parfum rules this project reports on, and the flakiness category each belongs to.
 RULE_CATEGORIES: dict[str, Category] = {
@@ -94,7 +95,11 @@ def run(dockerfile_path: str, ignore_map: IgnoreMap | None = None) -> list[dict]
         env=env,
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"docker-parfum failed: {proc.stderr.strip()}")
+        # On a parser crash, Node's default uncaught-exception dump includes the whole
+        # (often huge, circular) parsed AST as part of the error object's own printed
+        # properties -- only the first line or two carries an actual message, so the
+        # rest is truncated rather than left to bloat every caller's error/warning text.
+        raise RuntimeError(f"docker-parfum failed: {proc.stderr.strip()[:_MAX_ERROR_CHARS]}")
 
     try:
         raw_findings = json.loads(proc.stdout) if proc.stdout.strip() else []
