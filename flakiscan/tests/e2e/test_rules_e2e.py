@@ -72,7 +72,12 @@ def _write(content: str) -> str:
 def _run_cli(*args: str) -> subprocess.CompletedProcess:
     """Invoke the installed `flakiscan` command by name, resolved via PATH -- the same
     way a real user runs it after `pip install flakiscan`."""
-    return subprocess.run(["flakiscan", *args], capture_output=True, text=True)
+    return subprocess.run(
+        ["flakiscan", *args],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
 
 
 _FLAKISCAN_INSTALLED = shutil.which("flakiscan") is not None
