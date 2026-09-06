@@ -24,6 +24,7 @@ inserts a `# TODO` comment for it.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Callable
 
@@ -117,15 +118,34 @@ _RUN_RE = re.compile(r"^(RUN\s+)(.*)$", re.IGNORECASE | re.DOTALL)
 
 
 def repair_add_pipefail(text: str, rule_ids: set[str], resolvers: Resolvers) -> SubRepairResult:
+    """Make a RUN instruction's pipe failure-safe by explicitly invoking bash for it.
+
+    `set -o pipefail` is a bash/zsh/ksh feature -- it does not exist in the POSIX `sh`
+    (dash, on Debian-family images) that a RUN instruction uses by default whenever the
+    Dockerfile has no preceding SHELL instruction, which is the common case this rule
+    exists to fix in the first place. Prepending `set -o pipefail &&` to the RUN's
+    existing shell-form text as a plain string therefore *breaks a build that
+    previously succeeded*: dash rejects the option and the whole instruction fails
+    before any of the real command runs. Switching this one instruction to the JSON
+    exec form, explicitly naming bash as the interpreter, sidesteps the question of
+    what the ambient default shell is -- bash is present on the large majority of
+    real-world base images (Debian/Ubuntu family in particular) -- without depending on
+    a separate SHELL instruction persisting correctly across the rest of the file.
+    """
     match = _RUN_RE.match(text)
-    if not match or "set -o pipefail" in match.group(2):
+    if not match or "pipefail" in match.group(2):
         return _no_fix(text)
 
     prefix, body = match.groups()
+    exec_form = json.dumps(["/bin/bash", "-o", "pipefail", "-c", body])
     return SubRepairResult(
-        text=f"{prefix}set -o pipefail && {body}",
+        text=f"{prefix}{exec_form}",
         handled_rule_ids=set(rule_ids),
-        rationale=["Prepended 'set -o pipefail' so a failure earlier in the pipe is not silently ignored."],
+        rationale=[
+            "Switched to the exec form, explicitly running this instruction with `bash -o pipefail -c` "
+            "so a failure earlier in the pipe is not silently ignored -- appending `set -o pipefail` as "
+            "plain text would break on the POSIX `sh` a RUN instruction uses by default."
+        ],
     )
 
 
@@ -306,11 +326,28 @@ def repair_merge_duplicate_installs(text: str, rule_ids: set[str], resolvers: Re
 # ---------------------------------------------------------------------------
 
 _NPM_CACHE_CLEAN_RE = re.compile(r"npm\s+cache\s+clean\b[^&;]*")
+_SHELL_CONDITIONAL_RE = re.compile(r"\b(if|case)\b")
 
 
 def repair_add_cache_cleanup(text: str, rule_ids: set[str], resolvers: Resolvers) -> SubRepairResult:
+    """Append the missing cache-cleanup command for the package manager(s) this
+    instruction's findings identify.
+
+    Skips `npmCacheCleanAfterInstall`/`yarnCacheCleanAfterInstall` when the instruction
+    contains a shell `if`/`case` -- a real-world pattern this project's own corpus
+    validation caught a regression from: a conditional installer script (`if [ -f
+    package-lock.json ]; then npm ci; elif [ -f yarn.lock ]; then yarn install; ...
+    fi`) only actually runs *one* of npm/yarn/pnpm depending on which lockfile is
+    present, but appending `&& yarn cache clean` after the whole if/fi block runs it
+    unconditionally regardless of which branch executed -- breaking a build that
+    previously succeeded whenever yarn was not the branch taken (and so was never
+    installed in the image at all). `yumInstallRmVarCacheYum`'s `rm -rf` is left
+    unguarded since removing a directory that may already be empty is harmless even
+    when appended after a branch that never ran.
+    """
     handled: set[str] = set()
     rationale: list[str] = []
+    conditional = bool(_SHELL_CONDITIONAL_RE.search(text))
 
     if "yumInstallRmVarCacheYum" in rule_ids and _YUM_INSTALL_ANCHOR.search(text) and "/var/cache/yum" not in text:
         text = f"{text.rstrip()} && rm -rf /var/cache/yum"
@@ -324,12 +361,12 @@ def repair_add_cache_cleanup(text: str, rule_ids: set[str], resolvers: Resolvers
             handled.add("npmCacheCleanUseForce")
             rationale.append("Added --force to npm cache clean, which npm otherwise ignores.")
 
-    if "npmCacheCleanAfterInstall" in rule_ids and re.search(r"npm\s+install\b", text) and not _NPM_CACHE_CLEAN_RE.search(text):
+    if "npmCacheCleanAfterInstall" in rule_ids and not conditional and re.search(r"npm\s+install\b", text) and not _NPM_CACHE_CLEAN_RE.search(text):
         text = f"{text.rstrip()} && npm cache clean --force"
         handled.add("npmCacheCleanAfterInstall")
         rationale.append("Appended npm cache clean after install to avoid caching packages in the image layer.")
 
-    if "yarnCacheCleanAfterInstall" in rule_ids and re.search(r"yarn\s+install\b", text) and "yarn cache clean" not in text:
+    if "yarnCacheCleanAfterInstall" in rule_ids and not conditional and re.search(r"yarn\s+install\b", text) and "yarn cache clean" not in text:
         text = f"{text.rstrip()} && yarn cache clean"
         handled.add("yarnCacheCleanAfterInstall")
         rationale.append("Appended yarn cache clean after install to avoid caching packages in the image layer.")

@@ -95,13 +95,18 @@ def build(
     timed_out = False
 
     try:
+        # Captured as bytes, not decoded via text=True: a build's log can legitimately
+        # contain non-UTF-8 bytes (a build tool's own terminal control sequences or
+        # locale-specific output), and text=True's strict decoding would raise
+        # UnicodeDecodeError instead of ever returning a BuildResult. _decode()
+        # decodes with errors="replace" instead, so a build with a slightly garbled
+        # log is still reported as the success/failure it actually was.
         proc = subprocess.run(
             ["docker", "build", "-f", dockerfile_path, "-t", image_tag, context_dir],
             capture_output=True,
-            text=True,
             timeout=timeout_seconds,
         )
-        log = proc.stdout + proc.stderr
+        log = _decode(proc.stdout) + _decode(proc.stderr)
         success = proc.returncode == 0
     except subprocess.TimeoutExpired as exc:
         log = _decode(exc.stdout) + _decode(exc.stderr)
@@ -116,7 +121,7 @@ def build(
     image_size = _image_size_bytes(image_tag) if success else None
 
     if success and cleanup:
-        subprocess.run(["docker", "rmi", "-f", image_tag], capture_output=True, text=True)
+        subprocess.run(["docker", "rmi", "-f", image_tag], capture_output=True)
 
     return BuildResult(
         success=success,

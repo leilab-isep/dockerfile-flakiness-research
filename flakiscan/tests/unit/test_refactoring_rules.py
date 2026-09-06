@@ -47,12 +47,22 @@ class TestPinBaseImageDigest(unittest.TestCase):
 
 
 class TestAddPipefail(unittest.TestCase):
-    def test_prepends_pipefail(self):
+    def test_switches_to_bash_exec_form(self):
+        # set -o pipefail is a bash/zsh/ksh feature, not supported by the POSIX sh a
+        # RUN instruction uses by default -- prepending it as plain text would break a
+        # build that previously succeeded on that default shell. Explicitly naming
+        # bash via the exec form sidesteps the question of what the default shell is.
         result = rules.repair_add_pipefail("RUN cat f | grep x", {"missing_pipefail"}, NO_NETWORK)
-        self.assertEqual(result.text, "RUN set -o pipefail && cat f | grep x")
+        self.assertEqual(result.text, 'RUN ["/bin/bash", "-o", "pipefail", "-c", "cat f | grep x"]')
         self.assertEqual(result.handled_rule_ids, {"missing_pipefail"})
 
     def test_idempotent_when_already_present(self):
+        text = 'RUN ["/bin/bash", "-o", "pipefail", "-c", "cat f | grep x"]'
+        result = rules.repair_add_pipefail(text, {"missing_pipefail"}, NO_NETWORK)
+        self.assertEqual(result.text, text)
+        self.assertEqual(result.handled_rule_ids, set())
+
+    def test_idempotent_with_old_style_already_present(self):
         text = "RUN set -o pipefail && cat f | grep x"
         result = rules.repair_add_pipefail(text, {"missing_pipefail"}, NO_NETWORK)
         self.assertEqual(result.text, text)
@@ -150,6 +160,29 @@ class TestAddCacheCleanup(unittest.TestCase):
     def test_appends_yarn_cache_clean(self):
         result = rules.repair_add_cache_cleanup("RUN yarn install", {"yarnCacheCleanAfterInstall"}, NO_NETWORK)
         self.assertIn("yarn cache clean", result.text)
+
+    def test_defers_yarn_cache_clean_inside_a_conditional_installer(self):
+        # Regression: a real corpus Dockerfile only runs npm/yarn/pnpm conditionally
+        # depending on which lockfile is present. Appending "&& yarn cache clean"
+        # after the whole if/fi block runs it even when yarn was never installed
+        # (a different branch was taken), breaking a build that previously succeeded.
+        text = "RUN if [ -f yarn.lock ]; then yarn install; else npm ci; fi"
+        result = rules.repair_add_cache_cleanup(text, {"yarnCacheCleanAfterInstall"}, NO_NETWORK)
+        self.assertEqual(result.text, text)
+        self.assertEqual(result.handled_rule_ids, set())
+
+    def test_defers_npm_cache_clean_inside_a_conditional_installer(self):
+        text = "RUN if [ -f package-lock.json ]; then npm ci; else yarn install; fi"
+        result = rules.repair_add_cache_cleanup(text, {"npmCacheCleanAfterInstall"}, NO_NETWORK)
+        self.assertEqual(result.text, text)
+        self.assertEqual(result.handled_rule_ids, set())
+
+    def test_yum_cache_cleanup_still_applies_inside_a_conditional(self):
+        # rm -rf is harmless even when appended after a branch that never ran, so
+        # this one is not guarded the way the npm/yarn appends are.
+        text = "RUN if [ -f spec.rpm ]; then yum install -y curl; fi"
+        result = rules.repair_add_cache_cleanup(text, {"yumInstallRmVarCacheYum"}, NO_NETWORK)
+        self.assertIn("/var/cache/yum", result.text)
 
 
 class TestHardenCurlWget(unittest.TestCase):

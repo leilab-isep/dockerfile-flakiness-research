@@ -211,6 +211,13 @@ def main() -> int:
     )
     parser.add_argument("--timeout", type=float, default=300, help="Per-build timeout in seconds (default: 300)")
     parser.add_argument("--only", help="Comma-separated owner/repo pairs to run, for testing a subset (default: all)")
+    parser.add_argument(
+        "--shard",
+        help="Process only shard N of M, as 'N/M' (1-indexed, e.g. '2/4'), for splitting a large repo's "
+        "Dockerfiles across multiple CI jobs. Applied after --only; deterministic across runs since the "
+        "matching manifest entries are sorted first, then striped so adjacent files land in different "
+        "shards rather than clustering the slowest ones together.",
+    )
     parser.add_argument("--limit", type=int, help="Stop after this many Dockerfiles total (default: no limit)")
     parser.add_argument("--workers", type=int, default=4, help="Number of Dockerfiles to build concurrently (default: 4)")
     parser.add_argument(
@@ -232,6 +239,12 @@ def main() -> int:
     if args.only:
         wanted = set(args.only.split(","))
         manifest = [e for e in manifest if f"{e['owner']}/{e['repo']}" in wanted]
+    if args.shard:
+        shard_index, shard_count = (int(x) for x in args.shard.split("/"))
+        if not (1 <= shard_index <= shard_count):
+            parser.error(f"--shard {args.shard!r}: N must be between 1 and M")
+        manifest.sort(key=lambda e: (e["owner"], e["repo"], e["source_path"]))
+        manifest = manifest[shard_index - 1 :: shard_count]
     if args.limit:
         manifest = manifest[: args.limit]
 

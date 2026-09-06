@@ -54,6 +54,21 @@ class TestBuild(unittest.TestCase):
         self.assertFalse(result.timed_out)
         self.assertIn("Successfully built", result.log)
 
+    def test_successful_build_with_non_utf8_bytes_in_log(self):
+        # A build's log can legitimately contain bytes that are not valid UTF-8 (a
+        # build tool's own terminal control sequences or locale-specific output).
+        # subprocess.run(text=True) would raise UnicodeDecodeError decoding these
+        # instead of ever returning a CompletedProcess -- build() must capture as
+        # bytes and decode leniently itself instead of relying on text=True.
+        with (
+            patch("shutil.which", return_value="/usr/bin/docker"),
+            patch("subprocess.run", return_value=_fake_process(0, stdout=b"Successfully built \xff\xfe garbled")),
+        ):
+            result = builder.build("Dockerfile", ".", cleanup=False)
+
+        self.assertTrue(result.success)
+        self.assertIn("Successfully built", result.log)
+
     def test_failed_build(self):
         with (
             patch("shutil.which", return_value="/usr/bin/docker"),

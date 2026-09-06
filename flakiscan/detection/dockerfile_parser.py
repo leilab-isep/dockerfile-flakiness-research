@@ -66,9 +66,15 @@ def _parse_lines(lines: list[str]) -> list[Instruction]:
         start_line_number = i + 1
         full_line = line
         while full_line.rstrip().endswith("\\") and i + 1 < len(lines):
-            full_line = full_line.rstrip()[:-1]
             i += 1
-            full_line += " " + lines[i].rstrip("\n").lstrip()
+            next_line = lines[i].rstrip("\n")
+            if next_line.strip().startswith("#"):
+                # A comment line inside a continuation is a no-op Docker skips over,
+                # not the end of it -- the pending "\\" must survive until a genuine
+                # content line is found, or the rest of the instruction (everything
+                # after the comment) is silently dropped from what gets parsed.
+                continue
+            full_line = full_line.rstrip()[:-1] + " " + next_line.lstrip()
         end_line_number = i + 1
 
         instruction = _parse_instruction(full_line, start_line_number, end_line_number)

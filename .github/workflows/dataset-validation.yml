@@ -10,7 +10,7 @@ on:
       timeout_seconds:
         description: "Per-build timeout in seconds"
         required: false
-        default: "300"
+        default: "450"
       limit:
         description: "Limit Dockerfiles per repo, for a quick test run across all repos"
         required: false
@@ -24,6 +24,14 @@ env:
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
   HADOLINT_VERSION: "2.14.0"
+  # sha256 of the hadolint-linux-x86_64 asset for the pinned HADOLINT_VERSION above,
+  # from that release's published hadolint-linux-x86_64.sha256 -- verified before the
+  # downloaded binary is trusted, rather than trusting the download itself.
+  HADOLINT_SHA256: "6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47"
+  # A repo with more Dockerfiles than this is split into multiple matrix jobs (shards)
+  # instead of one, so a repo's own file count can't push a single job's total build
+  # time toward the 300-minute job timeout -- see discover below.
+  MAX_FILES_PER_SHARD: "20"
 
 jobs:
   discover:
@@ -40,6 +48,7 @@ jobs:
         run: |
           python3 - <<'EOF' >> "$GITHUB_OUTPUT"
           import json
+          import math
           import os
 
           repos = json.load(open("dataset/repositories.json"))
@@ -47,7 +56,30 @@ jobs:
           if wanted:
               repos = [r for r in repos if f"{r['owner']}/{r['repo']}" in wanted]
 
-          matrix = [{"repo": f"{r['owner']}/{r['repo']}", "slug": f"{r['owner']}__{r['repo']}"} for r in repos]
+          manifest = json.load(open("dataset/Dockerfiles/manifest.json"))
+          max_per_shard = int(os.environ["MAX_FILES_PER_SHARD"])
+          counts: dict[tuple[str, str], int] = {}
+          for entry in manifest:
+              key = (entry["owner"], entry["repo"])
+              counts[key] = counts.get(key, 0) + 1
+
+          matrix = []
+          for r in repos:
+              key = (r["owner"], r["repo"])
+              repo_label = f"{r['owner']}/{r['repo']}"
+              base_slug = f"{r['owner']}__{r['repo']}"
+              file_count = counts.get(key, 0)
+              num_shards = max(1, math.ceil(file_count / max_per_shard))
+
+              for shard_index in range(1, num_shards + 1):
+                  if num_shards > 1:
+                      slug = f"{base_slug}__shard{shard_index}of{num_shards}"
+                      shard_arg = f"{shard_index}/{num_shards}"
+                  else:
+                      slug = base_slug
+                      shard_arg = "1/1"
+                  matrix.append({"repo": repo_label, "slug": slug, "shard": shard_arg})
+
           print("matrix=" + json.dumps(matrix))
           EOF
 
@@ -87,17 +119,19 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           curl -sSL -o "$HOME/.local/bin/hadolint" \
             "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64"
+          echo "${HADOLINT_SHA256}  $HOME/.local/bin/hadolint" | sha256sum -c -
           chmod +x "$HOME/.local/bin/hadolint"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install Docker Parfum
         run: npm install -g @tdurieux/docker-parfum
 
-      - name: Run validation for ${{ matrix.repo }}
+      - name: Run validation for ${{ matrix.repo }} (shard ${{ matrix.shard }})
         run: |
           python3 dataset/run_validation.py \
             --only "${{ matrix.repo }}" \
-            --timeout "${{ inputs.timeout_seconds || '300' }}" \
+            --shard "${{ matrix.shard }}" \
+            --timeout "${{ inputs.timeout_seconds || '450' }}" \
             --workers "${{ inputs.workers || '4' }}" \
             ${{ inputs.limit && format('--limit {0}', inputs.limit) || '' }} \
             --output "dataset/validation-${{ matrix.slug }}.json" \
