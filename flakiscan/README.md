@@ -286,10 +286,3 @@ jobs:
   actually exists. Some rules (listed in [Repairing findings](#repairing-findings))
   never have an automated fix and will always show a TODO.
 
-## Roadmap
-
-Not yet implemented:
-
-- **Patch validation**: rebuilding a patched Dockerfile and comparing the outcome
-  against the original build to confirm a patch does not introduce a new failure. This
-  would be the only part of FlakiScan that builds the analyzed image.

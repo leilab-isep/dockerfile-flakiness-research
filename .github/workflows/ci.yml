@@ -5,11 +5,16 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["main"]
+  workflow_dispatch:
 
 env:
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
   HADOLINT_VERSION: "2.14.0"
+  # sha256 of the hadolint-linux-x86_64 asset for the pinned HADOLINT_VERSION above,
+  # from that release's published hadolint-linux-x86_64.sha256 -- verified before the
+  # downloaded binary is trusted, rather than trusting the download itself.
+  HADOLINT_SHA256: "6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47"
 
 jobs:
   lint:
@@ -63,7 +68,7 @@ jobs:
           path: dist/
 
   test:
-    name: Unit tests + coverage
+    name: Unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +98,7 @@ jobs:
           path: .coverage
 
   integration:
-    name: Integration tests (real Hadolint + Docker Parfum)
+    name: Integration tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -111,6 +116,7 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           curl -sSL -o "$HOME/.local/bin/hadolint" \
             "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64"
+          echo "${HADOLINT_SHA256}  $HOME/.local/bin/hadolint" | sha256sum -c -
           chmod +x "$HOME/.local/bin/hadolint"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
@@ -124,3 +130,51 @@ jobs:
 
       - name: Run integration tests
         run: python -m unittest discover -s flakiscan/tests/integration -p "test_*.py" -v
+
+  e2e:
+    name: End-to-end tests
+    needs: [lint, build, test, integration]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: flakiscan-dist
+          path: dist/
+
+      - name: Install the built wheel
+        run: |
+          python -m venv /tmp/flakiscan-venv
+          /tmp/flakiscan-venv/bin/pip install dist/*.whl
+          echo "/tmp/flakiscan-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install Hadolint
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL -o "$HOME/.local/bin/hadolint" \
+            "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64"
+          echo "${HADOLINT_SHA256}  $HOME/.local/bin/hadolint" | sha256sum -c -
+          chmod +x "$HOME/.local/bin/hadolint"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install Docker Parfum
+        run: npm install -g @tdurieux/docker-parfum
+
+      - name: Verify tools are on PATH
+        run: |
+          flakiscan --help > /dev/null
+          hadolint --version
+          docker-parfum --help > /dev/null
+
+      - name: Run e2e rule coverage tests
+        run: python -m unittest discover -s flakiscan/tests/e2e -p "test_*.py" -v
