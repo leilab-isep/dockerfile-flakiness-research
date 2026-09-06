@@ -398,9 +398,9 @@ def repair_harden_curl_wget(text: str, rule_ids: set[str], resolvers: Resolvers)
 
 # `sha256sum -c` parses its input as "<hash>  <filename>" (two spaces, or one space
 # plus a leading "*" for binary mode) -- a single space between hash and filename is
-# misparsed as part of the filename. The lookahead excludes text that already has two
-# spaces so an already-correct line is left untouched.
-_SHA256_ONE_SPACE_RE = re.compile(r"([a-fA-F0-9]{32,128}) (?!\s)(\S+)")
+# misparsed as part of the filename. The lookahead excludes binary-mode "*" and text
+# that already has a second whitespace character so an already-correct line is left untouched.
+_SHA256_ONE_SPACE_RE = re.compile(r"([a-fA-F0-9]{32,128}) (?![\s*])(\S+)")
 _GPG_VERIFY_ASC_RE = re.compile(r"gpg\s+--verify\s+(\S+\.asc)")
 
 
