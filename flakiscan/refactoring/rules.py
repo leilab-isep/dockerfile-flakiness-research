@@ -115,6 +115,22 @@ def repair_pin_base_image_digest(text: str, rule_ids: set[str], resolvers: Resol
 # ---------------------------------------------------------------------------
 
 _RUN_RE = re.compile(r"^(RUN\s+)(.*)$", re.IGNORECASE | re.DOTALL)
+_CONTINUATION_COMMENT_RE = re.compile(r"^\s*#")
+
+
+def _strip_continuation_comments(body: str) -> str:
+    """Remove Dockerfile-level comment lines from a RUN instruction's multi-line body.
+
+    Docker treats a "#"-prefixed line inside a "\\"-continued shell-form instruction as
+    a comment to skip, stripping it out before the text ever reaches a shell -- but
+    that stripping is Docker's own continuation-parsing at work, not anything the shell
+    does. Once the instruction is rewritten into a single exec-form array element,
+    nothing does that stripping anymore, and a literal "#" line left in the middle of
+    an unquoted shell construct (a `for x in \\` / `# comment` / `url; do` list, for
+    example -- a real pattern from docker-library/httpd's own Dockerfile) becomes a
+    genuine shell syntax error instead of the no-op it was in the original.
+    """
+    return "\n".join(line for line in body.split("\n") if not _CONTINUATION_COMMENT_RE.match(line))
 
 
 def repair_add_pipefail(text: str, rule_ids: set[str], resolvers: Resolvers) -> SubRepairResult:
@@ -137,6 +153,7 @@ def repair_add_pipefail(text: str, rule_ids: set[str], resolvers: Resolvers) -> 
         return _no_fix(text)
 
     prefix, body = match.groups()
+    body = _strip_continuation_comments(body)
     exec_form = json.dumps(["/bin/bash", "-o", "pipefail", "-c", body])
     return SubRepairResult(
         text=f"{prefix}{exec_form}",
@@ -679,7 +696,6 @@ def repair_add_download_checksum(text: str, rule_ids: set[str], resolvers: Resol
 
 SUB_REPAIRS: list[tuple[frozenset[str], RepairFunc]] = [
     (frozenset({"DL3007", "implicit_latest", "explicit_latest"}), repair_pin_base_image_digest),
-    (frozenset({"DL4006", "missing_pipefail"}), repair_add_pipefail),
     (frozenset({"curl_pipe_shell"}), repair_restructure_curl_pipe_shell),
     (frozenset({"DL3009", "aptGetInstallThenRemoveAptLists"}), repair_apt_get_cleanup),
     (
@@ -713,4 +729,11 @@ SUB_REPAIRS: list[tuple[frozenset[str], RepairFunc]] = [
         repair_pin_package_version,
     ),
     (frozenset({"download_no_checksum"}), repair_add_download_checksum),
+    # Must run last: every fix above assumes the instruction is still plain shell-form
+    # text it can prepend/append shell syntax to. Once this wraps it into the JSON
+    # exec form, appending so much as "&& rm -rf ..." after it produces invalid JSON,
+    # which Docker doesn't reject -- it silently falls back to treating the whole
+    # array literal (brackets, quotes, and all) as one shell-form command string,
+    # which then fails with "command not found" on the literal "[" token.
+    (frozenset({"DL4006", "missing_pipefail"}), repair_add_pipefail),
 ]

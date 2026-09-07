@@ -68,6 +68,17 @@ class TestAddPipefail(unittest.TestCase):
         self.assertEqual(result.text, text)
         self.assertEqual(result.handled_rule_ids, set())
 
+    def test_strips_dockerfile_level_comments_from_a_continued_body(self):
+        # Regression: a real docker-library/httpd Dockerfile has a "for url in \" /
+        # "# comment" / "url \" list -- Docker itself strips that comment line before
+        # ever handing the shell-form text to a shell, but the exec form has no such
+        # stripping step of its own, so a literal "#" line left in the middle of an
+        # unquoted `for ... in` list is a genuine bash syntax error, not a no-op.
+        text = "RUN set -eux; \\\n\tfor url in \\\n# see https://example.com/history\n\thttps://a.example.com/ \\\n\t; do echo $url; done"
+        result = rules.repair_add_pipefail(text, {"missing_pipefail"}, NO_NETWORK)
+        self.assertNotIn("#", result.text)
+        self.assertIn("https://a.example.com/", result.text)
+
 
 class TestRestructureCurlPipeShell(unittest.TestCase):
     def test_restructures_into_download_then_execute(self):

@@ -203,7 +203,7 @@ class TestCustomRules(RuleCase):
 
     def test_missing_pipefail(self):
         content = "FROM ubuntu:24.04\nRUN apt-get update | tee log.txt\n"
-        self.assert_detected_and_fixed("missing_pipefail", content, "RUN set -o pipefail && apt-get update | tee log.txt")
+        self.assert_detected_and_fixed("missing_pipefail", content, 'RUN ["/bin/bash", "-o", "pipefail", "-c", "apt-get update | tee log.txt"]')
 
     def test_download_no_checksum(self):
         content = f"FROM ubuntu:24.04\nRUN curl -fsSL {PINNED_URL} -o README.md\n"
@@ -225,7 +225,7 @@ class TestHadolintRules(RuleCase):
 
     def test_dl4006_missing_shell_pipefail(self):
         content = "FROM ubuntu:24.04\nRUN apt-get update | tee log.txt\n"
-        self.assert_detected_and_fixed("DL4006", content, "RUN set -o pipefail && apt-get update | tee log.txt")
+        self.assert_detected_and_fixed("DL4006", content, 'RUN ["/bin/bash", "-o", "pipefail", "-c", "apt-get update | tee log.txt"]')
 
     def test_dl3009_apt_lists_not_removed(self):
         content = "FROM ubuntu:24.04\nRUN apt-get update && apt-get install -y curl\n"

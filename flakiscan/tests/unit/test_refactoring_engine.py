@@ -3,6 +3,7 @@ instruction, applying sub-repairs, inserting fallback comments), with `detect` m
 out so these do not require Hadolint or Docker Parfum. See
 integration/test_refactoring_engine.py for tests against the real detection pipeline."""
 
+import json
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -58,6 +59,30 @@ class TestRepairDockerfile(unittest.TestCase):
 
         self.assertEqual(len(report.actions), 1)
         self.assertEqual(set(report.actions[0].applied_rule_ids), {"aptGetInstallUseNoRec", "aptGetInstallUseY"})
+
+    def test_pipefail_wrap_runs_after_other_fixes_append_to_the_same_instruction(self):
+        # Regression: repair_add_pipefail rewrites the instruction into a JSON
+        # exec-form array. If another fix (e.g. DL3009's apt list cleanup) still ran
+        # *after* that and appended "&& rm -rf ..." as plain text, the result would no
+        # longer be valid JSON -- and Docker doesn't reject invalid JSON in a RUN, it
+        # silently falls back to treating the whole array literal as one shell-form
+        # string, which then fails with "command not found" on the literal "[".
+        # SUB_REPAIRS must run repair_add_pipefail last so this never happens.
+        path = _write("RUN apt-get update && apt-get install -y curl | tee log\n")
+        result = DetectionResult(
+            findings=[
+                _finding("DL3009", 1, Category.DEPENDENCY),
+                _finding("missing_pipefail", 1, Category.REPRODUCIBILITY),
+            ]
+        )
+
+        with patch("flakiscan.refactoring.engine.detect", return_value=result):
+            report = repair_dockerfile(path, resolvers=FAKE_RESOLVERS)
+
+        patched_line = next(line for line in report.patched_text.splitlines() if line.startswith("RUN ["))
+        array_literal = patched_line[len("RUN ") :]
+        json.loads(array_literal)  # must not raise
+        self.assertIn("rm -rf /var/lib/apt/lists/*", array_literal)
 
     def test_finding_on_a_continuation_line_maps_to_the_owning_instruction(self):
         path = _write("RUN apt-get update && \\\n    apt-get install -y curl\n")
