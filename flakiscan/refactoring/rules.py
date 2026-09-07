@@ -60,6 +60,22 @@ def _has_short_flag(segment: str, letter: str) -> bool:
     return bool(re.search(rf"(?<!\S)-[A-Za-z]*{re.escape(letter)}[A-Za-z]*(?!\S)", segment))
 
 
+def _rstrip_line_continuation(segment: str) -> str:
+    """Strip trailing whitespace and, if present, a trailing "\\" line-continuation
+    marker from a command segment.
+
+    A plain `.rstrip()` stops at the backslash itself, since it is not whitespace --
+    leaving it in place before splicing new text right after it turns a "\\<newline>"
+    continuation into "\\<space>", which the shell reads as an escaped space rather
+    than a continuation, gluing the spliced text onto the end of the previous word
+    instead of starting a new command.
+    """
+    segment = segment.rstrip()
+    if segment.endswith("\\"):
+        segment = segment[:-1].rstrip()
+    return segment
+
+
 # ---------------------------------------------------------------------------
 # Pin base image to a digest
 # ---------------------------------------------------------------------------
@@ -133,20 +149,37 @@ def _strip_continuation_comments(body: str) -> str:
     return "\n".join(line for line in body.split("\n") if not _CONTINUATION_COMMENT_RE.match(line))
 
 
+_APK_RE = re.compile(r"\bapk\b")
+
+
 def repair_add_pipefail(text: str, rule_ids: set[str], resolvers: Resolvers) -> SubRepairResult:
-    """Make a RUN instruction's pipe failure-safe by explicitly invoking bash for it.
+    """Make a RUN instruction's pipe failure-safe by explicitly invoking a shell that
+    supports `-o pipefail` for it.
 
     `set -o pipefail` is a bash/zsh/ksh feature -- it does not exist in the POSIX `sh`
-    (dash, on Debian-family images) that a RUN instruction uses by default whenever the
-    Dockerfile has no preceding SHELL instruction, which is the common case this rule
-    exists to fix in the first place. Prepending `set -o pipefail &&` to the RUN's
-    existing shell-form text as a plain string therefore *breaks a build that
-    previously succeeded*: dash rejects the option and the whole instruction fails
-    before any of the real command runs. Switching this one instruction to the JSON
-    exec form, explicitly naming bash as the interpreter, sidesteps the question of
-    what the ambient default shell is -- bash is present on the large majority of
-    real-world base images (Debian/Ubuntu family in particular) -- without depending on
-    a separate SHELL instruction persisting correctly across the rest of the file.
+    a RUN instruction uses by default whenever the Dockerfile has no preceding SHELL
+    instruction, which is the common case this rule exists to fix in the first place.
+    Prepending `set -o pipefail &&` to the RUN's existing shell-form text as a plain
+    string therefore *breaks a build that previously succeeded*: the default shell
+    rejects the option and the whole instruction fails before any of the real command
+    runs. Switching this one instruction to the JSON exec form, explicitly naming an
+    interpreter that does support the option, sidesteps the question of what the
+    ambient default shell is, without depending on a separate SHELL instruction
+    persisting correctly across the rest of the file.
+
+    Which interpreter to name still depends on the base image: bash is present on the
+    large majority of real-world images (Debian/Ubuntu family in particular), but not
+    on Alpine's, where the default shell is BusyBox ash and bash is typically not
+    installed at all -- naming bash there fails immediately with "exec: /bin/bash: ...
+    no such file or directory" (confirmed against a real Alpine image), a strictly
+    worse regression than the one being fixed. Since this function only ever sees the
+    one instruction's own text, not the Dockerfile's FROM line, an Alpine-based
+    instruction is detected heuristically by the presence of `apk` in its own body --
+    true for every real Alpine regression found so far, since a RUN complex enough to
+    need pipefail protection also tends to invoke the package manager somewhere in the
+    same instruction. Ash is a safe choice whenever it matches, too: an Alpine image
+    with no SHELL override was already running this same script under ash before this
+    fix touches it, so ash is guaranteed to already understand its syntax.
     """
     match = _RUN_RE.match(text)
     if not match or "pipefail" in match.group(2):
@@ -154,12 +187,13 @@ def repair_add_pipefail(text: str, rule_ids: set[str], resolvers: Resolvers) -> 
 
     prefix, body = match.groups()
     body = _strip_continuation_comments(body)
-    exec_form = json.dumps(["/bin/bash", "-o", "pipefail", "-c", body])
+    shell = "/bin/ash" if _APK_RE.search(body) else "/bin/bash"
+    exec_form = json.dumps([shell, "-o", "pipefail", "-c", body])
     return SubRepairResult(
         text=f"{prefix}{exec_form}",
         handled_rule_ids=set(rule_ids),
         rationale=[
-            "Switched to the exec form, explicitly running this instruction with `bash -o pipefail -c` "
+            f"Switched to the exec form, explicitly running this instruction with `{shell} -o pipefail -c` "
             "so a failure earlier in the pipe is not silently ignored -- appending `set -o pipefail` as "
             "plain text would break on the POSIX `sh` a RUN instruction uses by default."
         ],
@@ -670,7 +704,19 @@ def repair_add_download_checksum(text: str, rule_ids: set[str], resolvers: Resol
         url = url_match.group(0)
 
         dest_match = re.search(r"(?:-o|-O|--output)\s+(\S+)", stripped)
-        dest = dest_match.group(1) if dest_match else url.rsplit("/", 1)[-1]
+        if not dest_match:
+            # No explicit destination file usually means this download's stdout feeds
+            # straight into a following command through a pipe (e.g. `curl ... | gpg
+            # --dearmor ...`) rather than being saved to disk. Appending "&& echo ... &&
+            # sha256sum -c ..." here would sit *before* that pipe in the command chain,
+            # so the pipe would carry sha256sum's own output into the next command
+            # instead of the download's -- silently breaking it rather than adding a
+            # checksum. Guessing a destination filename to write the download to
+            # instead would change what the instruction actually does, which is out of
+            # scope for this fix; skip this occurrence and let another curl/wget in the
+            # same instruction (if any) still be considered.
+            continue
+        dest = dest_match.group(1)
 
         checksum = resolvers.fetch_sha256(url)
         if not checksum:
@@ -680,7 +726,7 @@ def repair_add_download_checksum(text: str, rule_ids: set[str], resolvers: Resol
         # (echo ... | sha256sum -c) so this fix does not itself introduce a new shell
         # pipe that would need its own pipefail handling.
         checksum_file = f"{dest}.sha256"
-        segments[i] = f"{segment.rstrip()} && echo '{checksum}  {dest}' > {checksum_file} " f"&& sha256sum -c {checksum_file}"
+        segments[i] = f"{_rstrip_line_continuation(segment)} && echo '{checksum}  {dest}' > {checksum_file} " f"&& sha256sum -c {checksum_file}"
         return SubRepairResult(
             text="".join(segments),
             handled_rule_ids={"download_no_checksum"},

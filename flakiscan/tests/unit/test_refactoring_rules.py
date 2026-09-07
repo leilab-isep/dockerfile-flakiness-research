@@ -56,6 +56,18 @@ class TestAddPipefail(unittest.TestCase):
         self.assertEqual(result.text, 'RUN ["/bin/bash", "-o", "pipefail", "-c", "cat f | grep x"]')
         self.assertEqual(result.handled_rule_ids, {"missing_pipefail"})
 
+    def test_uses_ash_on_alpine_images(self):
+        # Regression: a real docker-library/redis Alpine Dockerfile has no bash
+        # installed at all -- naming it as the exec-form interpreter fails immediately
+        # with "exec: /bin/bash: ... no such file or directory", confirmed against a
+        # real Alpine image. ash is Alpine's actual default shell and does support
+        # -o pipefail, so it is what gets named whenever the instruction's own body
+        # mentions apk.
+        text = "RUN apk add --no-cache curl | tee log"
+        result = rules.repair_add_pipefail(text, {"missing_pipefail"}, NO_NETWORK)
+        self.assertEqual(result.text, 'RUN ["/bin/ash", "-o", "pipefail", "-c", "apk add --no-cache curl | tee log"]')
+        self.assertEqual(result.handled_rule_ids, {"missing_pipefail"})
+
     def test_idempotent_when_already_present(self):
         text = 'RUN ["/bin/bash", "-o", "pipefail", "-c", "cat f | grep x"]'
         result = rules.repair_add_pipefail(text, {"missing_pipefail"}, NO_NETWORK)
@@ -362,6 +374,32 @@ class TestAddDownloadChecksum(unittest.TestCase):
             {"download_no_checksum"},
             resolvers,
         )
+        self.assertEqual(result.handled_rule_ids, set())
+
+    def test_strips_trailing_line_continuation_before_splicing(self):
+        # Regression: a real fluentd Dockerfile has "wget -O f.tar.bz2 <url> \" with a
+        # trailing line-continuation before the next "&&"-joined command. A plain
+        # .rstrip() stops at the backslash (not whitespace) and leaves it in place, so
+        # splicing "&& echo ... && sha256sum -c ..." right after it turns "\<newline>"
+        # into "\<space>", which the shell reads as an escaped space gluing the
+        # spliced text onto the end of the URL argument instead of starting a new
+        # command.
+        resolvers = Resolvers(fetch_sha256=lambda url: "d" * 64)
+        text = "RUN wget -O f.tar.bz2 https://example.com/f.tar.bz2 \\\n  && tar -xf f.tar.bz2"
+        result = rules.repair_add_download_checksum(text, {"download_no_checksum"}, resolvers)
+        self.assertNotIn("\\ &&", result.text)
+        self.assertIn("sha256sum -c f.tar.bz2.sha256", result.text)
+
+    def test_defers_when_the_download_feeds_a_pipe_instead_of_a_file(self):
+        # Regression: a real corpus Dockerfile does `curl ... | gpg --dearmor -o ...`
+        # with no -o/-O on curl itself. Appending "&& echo ... && sha256sum -c ..."
+        # after that curl segment sits *before* the existing "|" in the command chain,
+        # so the pipe ends up carrying sha256sum's own output into gpg instead of the
+        # download -- silently breaking the instruction rather than adding a checksum.
+        resolvers = Resolvers(fetch_sha256=_unused)
+        text = "RUN curl -fsSL https://example.com/key.gpg | gpg --dearmor -o /etc/apt/keyrings/example.gpg"
+        result = rules.repair_add_download_checksum(text, {"download_no_checksum"}, resolvers)
+        self.assertEqual(result.text, text)
         self.assertEqual(result.handled_rule_ids, set())
 
 
