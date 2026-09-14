@@ -10,7 +10,9 @@ does not build the image and does not observe actual build outcomes over time.
 FlakiScan covers **detection, scoring, and automated repair**: it runs three
 independent analyzers, combines their output into one report, computes a numeric risk
 score, and can rewrite the Dockerfile to fix what it safely can. Validating a repaired
-Dockerfile by actually building it is not yet implemented (see [Roadmap](#roadmap)).
+Dockerfile by actually building it is implemented as a separate, independent package,
+[`flakiscan-validate`](../validation/README.md) -- see [Two independent
+packages](../README.md#two-independent-packages) in the repository root README.
 
 ## How it works
 
@@ -196,9 +198,11 @@ already fixed are not detected a second time, and re-running never duplicates a
 - Custom-rule pattern matching operates on instruction text with simple heuristics
   (for example, treating `&&`, `;`, and `|` as command separators). It can miss or
   misclassify unusual shell constructs, quoting, or variable expansion.
-- Repairs are not build-verified. FlakiScan does not build the patched Dockerfile to
-  confirm the fix actually works -- review a patch before relying on it, especially one
-  that pins a version or digest.
+- Repairs are not build-verified by this package. FlakiScan does not build the patched
+  Dockerfile to confirm the fix actually works -- pair `--repair` with
+  [`flakiscan-validate`](../validation/README.md) to build the original and repaired
+  Dockerfile and compare, or review a patch manually before relying on it, especially
+  one that pins a version or digest.
 - A repaired instruction spanning multiple physical lines (via a trailing `\`) is
   rewritten onto a single line. The fix is correct, but the original line-wrapping is
   not preserved.
@@ -250,7 +254,7 @@ coverage report -m --fail-under=80   # fails if total coverage drops below 80%
 
 The unit tier alone reaches roughly 95% coverage, since every external boundary
 (subprocess calls to Hadolint/Docker Parfum, network lookups in `refactoring/resolvers.py`)
-is exercised through a mock rather than skipped.
+is exercised through a mocked reference.
 
 ### Continuous integration
 
