@@ -123,7 +123,7 @@ coverage report -m --fail-under=80
 `.github/workflows/validation-ci.yml` runs on any push or pull request that touches
 `validation/`, as four independent jobs (**lint**, **build**, **test**,
 **integration**) mirroring flakiscan's own workflow. Unlike flakiscan's integration
-job, this one needs no setup step for its external tool: GitHub-hosted `ubuntu-latest`
+job, this one needs no setup step for its external tool: GitHub-hosted `ubuntu-24.04`
 runners come with Docker already installed and running.
 
 ## Limitations

@@ -63,7 +63,7 @@ or a remote script changed).
   the same lint/build/test/integration structure as `ci.yml`, scoped to
   `flakiscan-validate`: triggers only on a push or pull request to `main` that touches
   `validation/`. Its integration job needs no setup step for Docker, since
-  GitHub-hosted `ubuntu-latest` runners already have it installed and running.
+  GitHub-hosted `ubuntu-24.04` runners already have it installed and running.
 
 - **[`dataset-validation.yml`](.github/workflows/dataset-validation.yml) (Dataset
   Validation)** -- manually triggered only. Reads `dataset/repositories.json`, splits

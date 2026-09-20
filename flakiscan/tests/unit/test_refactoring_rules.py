@@ -1,24 +1,29 @@
 """Unit tests for each repair function, using fake resolvers so no test touches the
-network. A resolver that would only be called on a network-independent path raises if
-invoked, to catch accidental network dependencies."""
+network. Two shared fakes cover the two things a test might want a resolver to do
+instead of hitting the network: `NULL_RESOLVERS` (re-exported from
+`flakiscan.refactoring.resolvers`) reports every lookup as unresolvable, for testing
+the "the lookup failed" `# TODO` fallback path. `NO_NETWORK`, defined here, raises if
+called at all, for testing a code path that must never need a resolver in the first
+place -- a stricter guarantee than "returns None", and one `NULL_RESOLVERS` cannot
+give on its own."""
 
 import unittest
 
 from flakiscan.refactoring import rules
-from flakiscan.refactoring.resolvers import Resolvers
+from flakiscan.refactoring.resolvers import NULL_RESOLVERS, Resolvers
 
 
-def _unused(*args, **kwargs):
+def _never_called(*args, **kwargs):
     raise AssertionError("this test's fixture should not need to resolve a value")
 
 
 NO_NETWORK = Resolvers(
-    pypi_latest_version=_unused,
-    npm_latest_version=_unused,
-    rubygems_latest_version=_unused,
-    github_latest_tag=_unused,
-    docker_hub_digest=_unused,
-    fetch_sha256=_unused,
+    pypi_latest_version=_never_called,
+    npm_latest_version=_never_called,
+    rubygems_latest_version=_never_called,
+    github_latest_tag=_never_called,
+    docker_hub_digest=_never_called,
+    fetch_sha256=_never_called,
 )
 
 
@@ -40,8 +45,7 @@ class TestPinBaseImageDigest(unittest.TestCase):
         self.assertEqual(result.handled_rule_ids, set())
 
     def test_falls_back_when_digest_unresolvable(self):
-        resolvers = Resolvers(docker_hub_digest=lambda repo, tag: None)
-        result = rules.repair_pin_base_image_digest("FROM ubuntu:latest", {"explicit_latest"}, resolvers)
+        result = rules.repair_pin_base_image_digest("FROM ubuntu:latest", {"explicit_latest"}, NULL_RESOLVERS)
         self.assertEqual(result.handled_rule_ids, set())
         self.assertEqual(result.text, "FROM ubuntu:latest")
 
@@ -285,8 +289,7 @@ class TestPinGitClone(unittest.TestCase):
         self.assertEqual(result.handled_rule_ids, set())
 
     def test_falls_back_when_tag_unresolvable(self):
-        resolvers = Resolvers(github_latest_tag=lambda owner, repo: None)
-        result = rules.repair_pin_git_clone("RUN git clone https://github.com/example/repo.git", {"git_clone_no_pin"}, resolvers)
+        result = rules.repair_pin_git_clone("RUN git clone https://github.com/example/repo.git", {"git_clone_no_pin"}, NULL_RESOLVERS)
         self.assertEqual(result.handled_rule_ids, set())
 
 
@@ -344,13 +347,13 @@ class TestPinPackageVersion(unittest.TestCase):
                 self.assertEqual(result.handled_rule_ids, set())
 
     def test_multiple_packages_are_too_ambiguous_to_pin(self):
-        resolvers = Resolvers(pypi_latest_version=_unused)
-        result = rules.repair_pin_package_version("RUN pip install requests flask", {"DL3013"}, resolvers)
+        # Too ambiguous to resolve at all -- must bail out before ever calling a
+        # resolver, not just fail to find a version.
+        result = rules.repair_pin_package_version("RUN pip install requests flask", {"DL3013"}, NO_NETWORK)
         self.assertEqual(result.handled_rule_ids, set())
 
     def test_falls_back_when_version_unresolvable(self):
-        resolvers = Resolvers(pypi_latest_version=lambda pkg: None)
-        result = rules.repair_pin_package_version("RUN pip install requests", {"DL3013"}, resolvers)
+        result = rules.repair_pin_package_version("RUN pip install requests", {"DL3013"}, NULL_RESOLVERS)
         self.assertEqual(result.handled_rule_ids, set())
 
 
@@ -368,11 +371,10 @@ class TestAddDownloadChecksum(unittest.TestCase):
         self.assertEqual(result.handled_rule_ids, {"download_no_checksum"})
 
     def test_falls_back_when_checksum_unresolvable(self):
-        resolvers = Resolvers(fetch_sha256=lambda url: None)
         result = rules.repair_add_download_checksum(
             "RUN wget https://example.com/archive.tar.gz -O archive.tar.gz",
             {"download_no_checksum"},
-            resolvers,
+            NULL_RESOLVERS,
         )
         self.assertEqual(result.handled_rule_ids, set())
 
@@ -396,9 +398,8 @@ class TestAddDownloadChecksum(unittest.TestCase):
         # after that curl segment sits *before* the existing "|" in the command chain,
         # so the pipe ends up carrying sha256sum's own output into gpg instead of the
         # download -- silently breaking the instruction rather than adding a checksum.
-        resolvers = Resolvers(fetch_sha256=_unused)
         text = "RUN curl -fsSL https://example.com/key.gpg | gpg --dearmor -o /etc/apt/keyrings/example.gpg"
-        result = rules.repair_add_download_checksum(text, {"download_no_checksum"}, resolvers)
+        result = rules.repair_add_download_checksum(text, {"download_no_checksum"}, NO_NETWORK)
         self.assertEqual(result.text, text)
         self.assertEqual(result.handled_rule_ids, set())
 

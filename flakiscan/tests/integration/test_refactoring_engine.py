@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from flakiscan.refactoring.engine import repair_dockerfile
-from flakiscan.refactoring.resolvers import Resolvers
+from flakiscan.refactoring.resolvers import NULL_RESOLVERS, Resolvers
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 
@@ -56,15 +56,7 @@ class TestIdempotency(unittest.TestCase):
         self.assertEqual(first, second)
 
     def test_idempotent_when_everything_falls_back(self):
-        always_none = Resolvers(
-            pypi_latest_version=lambda pkg: None,
-            npm_latest_version=lambda pkg: None,
-            rubygems_latest_version=lambda gem: None,
-            github_latest_tag=lambda owner, repo: None,
-            docker_hub_digest=lambda repo, tag: None,
-            fetch_sha256=lambda url: None,
-        )
-        first, second = self._run_twice(always_none)
+        first, second = self._run_twice(NULL_RESOLVERS)
         self.assertEqual(first, second)
 
     def test_third_pass_is_still_stable(self):
@@ -89,9 +81,9 @@ class TestIgnoreCommentInteraction(unittest.TestCase):
         # push a pre-existing ignore comment down by one line, so on the next run its
         # target line no longer matched the instruction it was meant to suppress.
         path = _write("# flakiscan-ignore: DL3007\nFROM ubuntu:latest\n")
-        report1 = repair_dockerfile(path, resolvers=Resolvers(docker_hub_digest=lambda repo, tag: None))
+        report1 = repair_dockerfile(path, resolvers=NULL_RESOLVERS)
         path2 = _write(report1.patched_text)
-        report2 = repair_dockerfile(path2, resolvers=Resolvers(docker_hub_digest=lambda repo, tag: None))
+        report2 = repair_dockerfile(path2, resolvers=NULL_RESOLVERS)
         self.assertEqual(report1.patched_text, report2.patched_text)
 
 
@@ -102,7 +94,7 @@ class TestTodoFallback(unittest.TestCase):
         self.assertIn("# TODO(flakiscan): could not automatically fix: arg_no_default", report.patched_text)
 
     def test_todo_comment_lists_all_unhandled_rules_for_the_line(self):
-        action = repair_dockerfile(str(FIXTURES / "flaky.Dockerfile"), resolvers=Resolvers(pypi_latest_version=lambda pkg: None))
+        action = repair_dockerfile(str(FIXTURES / "flaky.Dockerfile"), resolvers=NULL_RESOLVERS)
         pip_action = next(a for a in action.actions if a.instruction == "RUN" and "DL3013" in a.triggered_rule_ids)
         self.assertIn("DL3013", pip_action.fallback_rule_ids)
         self.assertNotIn("DL3013", pip_action.applied_rule_ids)

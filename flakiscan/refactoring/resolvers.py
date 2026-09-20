@@ -137,3 +137,21 @@ class Resolvers:
 
 
 DEFAULT_RESOLVERS = Resolvers()
+
+
+def _always_none(*_args: object) -> None:
+    return None
+
+
+# Null Object for Resolvers: every lookup reports "unresolvable" instead of touching
+# the network. Useful in tests that want to exercise the "the lookup failed" fallback
+# path (a `# TODO` comment rather than a fix) without writing an ad hoc `lambda: None`
+# for each field it cares about.
+NULL_RESOLVERS = Resolvers(
+    pypi_latest_version=_always_none,
+    npm_latest_version=_always_none,
+    rubygems_latest_version=_always_none,
+    github_latest_tag=_always_none,
+    docker_hub_digest=_always_none,
+    fetch_sha256=_always_none,
+)
