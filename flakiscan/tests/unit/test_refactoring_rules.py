@@ -188,6 +188,32 @@ class TestAddCacheCleanup(unittest.TestCase):
         result = rules.repair_add_cache_cleanup("RUN yarn install", {"yarnCacheCleanAfterInstall"}, NO_NETWORK)
         self.assertIn("yarn cache clean", result.text)
 
+    def test_does_not_apply_npm_cache_clean_to_a_pnpm_install(self):
+        # Regression: this project's own corpus validation found "npm" matching as a
+        # bare substring of "pnpm" (no leading word boundary), so a pnpm-only
+        # Dockerfile -- real corpus example: emmanuelgautier/awesome-dockerfiles'
+        # express-pnpm/Dockerfile -- got "&& npm cache clean --force" appended. That
+        # command finds no npm cache to remove and instead creates one, so the patched
+        # image grew by ~1.09 MB instead of shrinking. Docker Parfum still flags
+        # npmCacheCleanAfterInstall on this line (an external tool's own imprecision,
+        # out of this project's control) -- the fix is that FlakiScan's own precondition
+        # must not be fooled by the same substring collision, and instead defer to a
+        # `# TODO` rather than silently apply the wrong package manager's command.
+        text = "RUN pnpm install --frozen-lockfile --prod"
+        result = rules.repair_add_cache_cleanup(text, {"npmCacheCleanAfterInstall"}, NO_NETWORK)
+        self.assertEqual(result.text, text)
+        self.assertEqual(result.handled_rule_ids, set())
+
+    def test_npm_cache_clean_still_applies_when_npm_genuinely_runs_elsewhere_in_the_line(self):
+        # Regression safety net for the word-boundary fix above: a real corpus line
+        # (cypress-io/cypress-docker-images) genuinely uses npm to install pnpm
+        # globally -- "npm install" here is not a substring collision, so the repair
+        # must still apply.
+        text = "RUN npm install -g pnpm@9 --force"
+        result = rules.repair_add_cache_cleanup(text, {"npmCacheCleanAfterInstall"}, NO_NETWORK)
+        self.assertIn("npm cache clean --force", result.text)
+        self.assertEqual(result.handled_rule_ids, {"npmCacheCleanAfterInstall"})
+
     def test_defers_yarn_cache_clean_inside_a_conditional_installer(self):
         # Regression: a real corpus Dockerfile only runs npm/yarn/pnpm conditionally
         # depending on which lockfile is present. Appending "&& yarn cache clean"
@@ -333,6 +359,18 @@ class TestPinPackageVersion(unittest.TestCase):
         result = rules.repair_pin_package_version("RUN npm install lodash && npm cache clean --force", {"DL3016"}, resolvers)
         self.assertEqual(result.text, "RUN npm install lodash@4.17.21 && npm cache clean --force")
         self.assertEqual(result.handled_rule_ids, {"DL3016"})
+
+    def test_does_not_pin_a_pnpm_install_as_if_it_were_npm(self):
+        # Same substring-collision bug class as npmCacheCleanAfterInstall (see
+        # test_does_not_apply_npm_cache_clean_to_a_pnpm_install): _NPM_INSTALL_ANCHOR
+        # also matched "npm" as a bare substring of "pnpm" here, so a bare `pnpm
+        # install lodash` would have been mistaken for an unpinned npm install and
+        # rewritten with an npm-registry-resolved version. DL3016 is Hadolint's own
+        # "npm install unpinned" rule and is not expected to ever fire on a pnpm line
+        # in practice, but the precondition must not rely on that alone.
+        result = rules.repair_pin_package_version("RUN pnpm install lodash", {"DL3016"}, NO_NETWORK)
+        self.assertEqual(result.text, "RUN pnpm install lodash")
+        self.assertEqual(result.handled_rule_ids, set())
 
     def test_apt_apk_yum_zypper_dnf_always_defer(self):
         for rule_id, command in [

@@ -376,7 +376,7 @@ def repair_merge_duplicate_installs(text: str, rule_ids: set[str], resolvers: Re
 # Add package-manager cache cleanup
 # ---------------------------------------------------------------------------
 
-_NPM_CACHE_CLEAN_RE = re.compile(r"npm\s+cache\s+clean\b[^&;]*")
+_NPM_CACHE_CLEAN_RE = re.compile(r"\bnpm\s+cache\s+clean\b[^&;]*")
 _SHELL_CONDITIONAL_RE = re.compile(r"\b(if|case)\b")
 
 
@@ -395,6 +395,18 @@ def repair_add_cache_cleanup(text: str, rule_ids: set[str], resolvers: Resolvers
     installed in the image at all). `yumInstallRmVarCacheYum`'s `rm -rf` is left
     unguarded since removing a directory that may already be empty is harmless even
     when appended after a branch that never ran.
+
+    The `npm`/`yarn` command anchors below are word-boundary-anchored on *both* sides
+    (`\\bnpm\\b`, not `npm`): without a leading boundary, `npm` matches as a bare
+    substring of `pnpm`, so `pnpm install` was previously mistaken for `npm install`
+    and got an `npm cache clean --force` appended -- a command that finds no npm cache
+    to remove and instead creates one, growing the image instead of shrinking it (this
+    project's own corpus validation caught a real instance: a pnpm-only Dockerfile
+    grew by ~1.09 MB from this exact repair). Same reasoning applies symmetrically to
+    `yarn`, defensively, even though no real collision for it surfaced in the corpus.
+    The same substring collision was also found and fixed in `_NPM_INSTALL_ANCHOR`
+    (used by `repair_pin_package_version` for DL3016), a second, independent instance
+    of the identical bug class in this module.
     """
     handled: set[str] = set()
     rationale: list[str] = []
@@ -412,12 +424,12 @@ def repair_add_cache_cleanup(text: str, rule_ids: set[str], resolvers: Resolvers
             handled.add("npmCacheCleanUseForce")
             rationale.append("Added --force to npm cache clean, which npm otherwise ignores.")
 
-    if "npmCacheCleanAfterInstall" in rule_ids and not conditional and re.search(r"npm\s+install\b", text) and not _NPM_CACHE_CLEAN_RE.search(text):
+    if "npmCacheCleanAfterInstall" in rule_ids and not conditional and re.search(r"\bnpm\s+install\b", text) and not _NPM_CACHE_CLEAN_RE.search(text):
         text = f"{text.rstrip()} && npm cache clean --force"
         handled.add("npmCacheCleanAfterInstall")
         rationale.append("Appended npm cache clean after install to avoid caching packages in the image layer.")
 
-    if "yarnCacheCleanAfterInstall" in rule_ids and not conditional and re.search(r"yarn\s+install\b", text) and "yarn cache clean" not in text:
+    if "yarnCacheCleanAfterInstall" in rule_ids and not conditional and re.search(r"\byarn\s+install\b", text) and "yarn cache clean" not in text:
         text = f"{text.rstrip()} && yarn cache clean"
         handled.add("yarnCacheCleanAfterInstall")
         rationale.append("Appended yarn cache clean after install to avoid caching packages in the image layer.")
@@ -608,7 +620,7 @@ def _unversioned_packages(tokens: list[str]) -> list[str]:
     return packages
 
 
-_NPM_INSTALL_ANCHOR = re.compile(r"npm\s+install\b")
+_NPM_INSTALL_ANCHOR = re.compile(r"\bnpm\s+install\b")
 _GEM_INSTALL_ANCHOR = re.compile(r"gem\s+install\b")
 
 
