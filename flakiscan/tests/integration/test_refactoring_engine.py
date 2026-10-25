@@ -123,6 +123,56 @@ class TestNeverInvokesDockerBuild(unittest.TestCase):
             repair_dockerfile(str(FIXTURES / "flaky.Dockerfile"), resolvers=FAKE_RESOLVERS)
 
 
+class TestPackageManagerCacheCleanPrecondition(unittest.TestCase):
+    """Regression coverage for a bug found via this project's own 655-Dockerfile
+    corpus validation: `npmCacheCleanAfterInstall` was applied to a pnpm-only
+    Dockerfile (real corpus example: emmanuelgautier/awesome-dockerfiles'
+    express-pnpm/Dockerfile), appending a useless `npm cache clean --force` that grew
+    the image by ~1.09 MB instead of shrinking it, because FlakiScan's own precondition
+    regex matched "npm" as a bare substring of "pnpm". Docker Parfum (an external
+    dependency) still flags npmCacheCleanAfterInstall on a pnpm-only install line --
+    that detection is unchanged and out of this project's control -- so these tests
+    exercise the real Hadolint/Parfum pipeline to confirm FlakiScan's own Refactoring
+    Engine now correctly abstains (defers to a `# TODO`) instead of applying the wrong
+    package manager's command.
+    """
+
+    def test_pnpm_only_dockerfile_does_not_get_npm_cache_clean(self):
+        content = (
+            "FROM node:lts-slim\n"
+            "WORKDIR /usr/src/app\n"
+            "RUN corepack enable\n"
+            "COPY package.json pnpm-lock.yaml ./\n"
+            "RUN pnpm install --frozen-lockfile --prod\n"
+        )
+        path = _write(content)
+        report = repair_dockerfile(path, resolvers=FAKE_RESOLVERS)
+
+        pnpm_action = next(a for a in report.actions if "pnpm install" in a.original_text)
+        self.assertNotIn("npmCacheCleanAfterInstall", pnpm_action.applied_rule_ids)
+        self.assertIn("npmCacheCleanAfterInstall", pnpm_action.fallback_rule_ids)
+        self.assertNotIn("npm cache clean", report.patched_text)
+        self.assertIn("# TODO(flakiscan): could not automatically fix: npmCacheCleanAfterInstall", report.patched_text)
+
+    def test_genuine_npm_install_still_gets_cache_clean(self):
+        content = "FROM node:20\nWORKDIR /usr/src/app\nCOPY package.json ./\nRUN npm install\n"
+        path = _write(content)
+        report = repair_dockerfile(path, resolvers=FAKE_RESOLVERS)
+
+        npm_action = next(a for a in report.actions if "npm install" in a.original_text)
+        self.assertIn("npmCacheCleanAfterInstall", npm_action.applied_rule_ids)
+        self.assertIn("npm cache clean --force", report.patched_text)
+
+    def test_yarn_only_dockerfile_still_gets_yarn_cache_clean(self):
+        content = "FROM node:20\nWORKDIR /usr/src/app\nCOPY package.json yarn.lock ./\nRUN yarn install --frozen-lockfile\n"
+        path = _write(content)
+        report = repair_dockerfile(path, resolvers=FAKE_RESOLVERS)
+
+        yarn_action = next(a for a in report.actions if "yarn install" in a.original_text)
+        self.assertIn("yarnCacheCleanAfterInstall", yarn_action.applied_rule_ids)
+        self.assertIn("yarn cache clean", report.patched_text)
+
+
 class TestHealthyFixtureIsUntouched(unittest.TestCase):
     def test_no_findings_means_no_changes(self):
         report = repair_dockerfile(str(FIXTURES / "healthy.Dockerfile"), resolvers=FAKE_RESOLVERS)
